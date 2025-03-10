@@ -160,9 +160,12 @@ if __name__ == "__main__":
     airfoil = 'ARAD8pct_polar.txt'
     data1 = pd.read_csv(airfoil, header=0,
                         names=["alfa", "cl", "cd", "cm"], sep='\s+')
+
     polar_alpha = data1['alfa'][1:].to_numpy().astype(float)
     polar_cl = data1['cl'][1:].to_numpy().astype(float)
     polar_cd = data1['cd'][1:].to_numpy().astype(float)
+
+
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
     axs[0].plot(polar_alpha, polar_cl)
     #axs[0].set_xlim([-30, 30])
