@@ -14,7 +14,6 @@ def CTfunction(a, glauert=False):
         CT1 = 1.816;
         a1 = 1 - np.sqrt(CT1) / 2;
         CT[a > a1] = CT1 - 4 * (np.sqrt(CT1) - 1) * (1 - a[a > a1])
-
     return CT
 
 
@@ -58,10 +57,10 @@ def loadBladeElement(vnorm, vtan, r_R, chord, twist, polar_alpha, polar_cl, pola
     fnorm = lift * np.cos(inflowangle) + drag * np.sin(inflowangle)
     ftan = lift * np.sin(inflowangle) - drag * np.cos(inflowangle)
     gamma = 0.5 * np.sqrt(vmag2) * cl * chord
-    return fnorm, ftan, gamma
+    return fnorm, ftan, gamma, alpha, inflowangle
 
 
-def solveStreamtube(Uinf, r1_R, r2_R, rootradius_R, tipradius_R, Omega, Radius, NBlades, chord, twist, polar_alpha, polar_cl, polar_cd):
+def solveStreamtube(Uinf, r1_R, r2_R, rootradius_R, tipradius_R, Omega, Radius, NBlades, chord, twist, polar_alpha, polar_cl, polar_cd, verbose: bool = False):
     """
     solve balance of momentum between blade element load and loading in the streamtube
     input variables:
@@ -88,7 +87,7 @@ def solveStreamtube(Uinf, r1_R, r2_R, rootradius_R, tipradius_R, Omega, Radius, 
         Urotor = Uinf * (1 - a)  # axial velocity at rotor
         Utan = (1 + aline) * Omega * r_R * Radius  # tangential velocity at rotor
         # calculate loads in blade segment in 2D (N/m)
-        fnorm, ftan, gamma = loadBladeElement(Urotor, Utan, r_R, chord, twist, polar_alpha, polar_cl, polar_cd)
+        fnorm, ftan, gamma, alpha, inflowangle = loadBladeElement(Urotor, Utan, r_R, chord, twist, polar_alpha, polar_cl, polar_cd)
         load3Daxial = fnorm * Radius * (r2_R - r1_R) * NBlades  # 3D force in axial direction
         # load3Dtan =loads[1]*Radius*(r2_R-r1_R)*NBlades # 3D force in azimuthal/tangential direction (not used here)
 
@@ -121,16 +120,14 @@ def solveStreamtube(Uinf, r1_R, r2_R, rootradius_R, tipradius_R, Omega, Radius, 
 
         # // test convergence of solution, by checking convergence of axial induction
         if (np.abs(a - anew) < Erroriterations):
-            # print("iterations")
-            # print(i)
+            if verbose: print("iterations", i, np.abs(a - anew))
             break
 
     return [a, aline, r_R, fnorm, ftan, gamma]
 
 
 
-if __name__ == "__main__":
-    a = np.arange(-.5, 1, .01)
+def plot_induction(a, ):
     CTmom = CTfunction(a)  # CT without correction
     CTglauert = CTfunction(a, True)  # CT with Glauert's correction
     a2 = ainduction(CTglauert)
@@ -145,7 +142,8 @@ if __name__ == "__main__":
     plt.legend()
     plt.show()
 
-    r_R = np.arange(0.1, 1, .01)
+
+def plot_prandtl_corrections(r_R, ):
     a = np.zeros(np.shape(r_R)) + 0.3
     Prandtl, Prandtltip, Prandtlroot = PrandtlTipRootCorrection(r_R, 0.1, 1, 7, 3, a)
 
@@ -157,7 +155,8 @@ if __name__ == "__main__":
     plt.legend()
     plt.show()
 
-    airfoil = 'ARAD8pct_polar.txt'
+
+def read_polar(airfoil: str, plot: bool = False):
     data1 = pd.read_csv(airfoil, header=0,
                         names=["alfa", "cl", "cd", "cm"], sep='\s+')
 
@@ -165,18 +164,79 @@ if __name__ == "__main__":
     polar_cl = data1['cl'][1:].to_numpy().astype(float)
     polar_cd = data1['cd'][1:].to_numpy().astype(float)
 
+    if plot:
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+        axs[0].plot(polar_alpha, polar_cl)
+        # axs[0].set_xlim([-30, 30])
+        axs[0].set_xlabel(r'$\alpha$')
+        axs[0].set_ylabel(r'$C_l$')
+        axs[0].grid()
+        axs[1].plot(polar_cd, polar_cl)
+        # axs[1].set_xlim([0, .1])
+        axs[1].set_xlabel(r'$C_d$')
+        axs[1].grid()
+        plt.show()
+    return polar_alpha, polar_cl, polar_cd
 
-    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
-    axs[0].plot(polar_alpha, polar_cl)
-    #axs[0].set_xlim([-30, 30])
-    axs[0].set_xlabel(r'$\alpha$')
-    axs[0].set_ylabel(r'$C_l$')
-    axs[0].grid()
-    axs[1].plot(polar_cd, polar_cl)
-    #axs[1].set_xlim([0, .1])
-    axs[1].set_xlabel(r'$C_d$')
-    axs[1].grid()
-    plt.show()
+
+def run_bem(r_R, chord_distribution, twist_distribution, Uinf, TSR, Radius, NBlades, TipLocation_R, RootLocation_R, plot: bool = True,  verbose: bool = True):
+    Omega = Uinf * TSR / Radius
+    # solve BEM model
+    results = np.zeros([len(r_R) - 1, 6])
+
+    for i in range(len(r_R) - 1):
+        chord = np.interp((r_R[i] + r_R[i + 1]) / 2, r_R, chord_distribution)
+        twist = np.interp((r_R[i] + r_R[i + 1]) / 2, r_R, twist_distribution)
+
+        results[i, :] = solveStreamtube(Uinf, r_R[i], r_R[i + 1], RootLocation_R, TipLocation_R, Omega, Radius, NBlades, chord, twist, polar_alpha, polar_cl, polar_cd, verbose=verbose)
+
+    areas = (r_R[1:] ** 2 - r_R[:-1] ** 2) * np.pi * Radius ** 2
+    dr = (r_R[1:] - r_R[:-1]) * Radius
+    CT = np.sum(dr * results[:, 3] * NBlades / (0.5 * Uinf ** 2 * np.pi * Radius ** 2))
+    CP = np.sum(dr * results[:, 4] * results[:, 2] * NBlades * Radius * Omega / (0.5 * Uinf ** 3 * np.pi * Radius ** 2))
+    CQ = 0
+
+    print("CT is ", CT)
+    print("CP is ", CP)
+    print("CQ is ", CQ)
+
+    if plot:
+        fig1 = plt.figure(figsize=(12, 6))
+        plt.title('Axial and tangential induction')
+        plt.plot(results[:, 2], results[:, 0], 'r-', label=r'$a$')
+        plt.plot(results[:, 2], results[:, 1], 'g--', label=r'$a^,$')
+        plt.grid()
+        plt.xlabel('r/R')
+        plt.legend()
+        plt.show()
+
+        fig1 = plt.figure(figsize=(12, 6))
+        plt.title(r'Normal and tagential force, non-dimensioned by $\frac{1}{2} \rho U_\infty^2 R$')
+        plt.plot(results[:, 2], results[:, 3] / (0.5 * Uinf ** 2 * Radius), 'r-', label=r'Fnorm')
+        plt.plot(results[:, 2], results[:, 4] / (0.5 * Uinf ** 2 * Radius), 'g--', label=r'Ftan')
+        plt.grid()
+        plt.xlabel('r/R')
+        plt.legend()
+        plt.show()
+
+        fig1 = plt.figure(figsize=(12, 6))
+        plt.title(r'Circulation distribution, non-dimensioned by $\frac{\pi U_\infty^2}{\Omega * NBlades } $')
+        plt.plot(results[:, 2], results[:, 5] / (np.pi * Uinf ** 2 / (NBlades * Omega)), 'r-', label=r'$\Gamma$')
+        plt.grid()
+        plt.xlabel('r/R')
+        plt.legend()
+        plt.show()
+
+    return CT, CP, CQ, results,
+
+
+
+if __name__ == "__main__":
+    plot_induction(a = np.arange(-.5, 1, .01))
+    plot_prandtl_corrections(r_R = np.arange(0.1, 1, .01))
+    polar_alpha, polar_cl, polar_cd = read_polar(airfoil = 'ARAD8pct_polar.txt', plot=True)
+
+
 
     delta_r_R = .01
     r_R = np.arange(0.2, 1 + delta_r_R / 2, delta_r_R)
@@ -190,51 +250,12 @@ if __name__ == "__main__":
     Uinf = 1  # unperturbed wind speed in m/s
     TSR = 8  # tip speed ratio
     Radius = 50
-    Omega = Uinf * TSR / Radius
     NBlades = 3
 
     TipLocation_R = 1
     RootLocation_R = 0.2
 
-    # solve BEM model
-    results = np.zeros([len(r_R) - 1, 6])
+    run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=TSR, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, plot = True)
 
-    for i in range(len(r_R) - 1):
-        chord = np.interp((r_R[i] + r_R[i + 1]) / 2, r_R, chord_distribution)
-        twist = np.interp((r_R[i] + r_R[i + 1]) / 2, r_R, twist_distribution)
 
-        results[i, :] = solveStreamtube(Uinf, r_R[i], r_R[i + 1], RootLocation_R, TipLocation_R, Omega, Radius, NBlades, chord, twist, polar_alpha, polar_cl, polar_cd)
 
-    areas = (r_R[1:] ** 2 - r_R[:-1] ** 2) * np.pi * Radius ** 2
-    dr = (r_R[1:] - r_R[:-1]) * Radius
-    CT = np.sum(dr * results[:, 3] * NBlades / (0.5 * Uinf ** 2 * np.pi * Radius ** 2))
-    CP = np.sum(dr * results[:, 4] * results[:, 2] * NBlades * Radius * Omega / (0.5 * Uinf ** 3 * np.pi * Radius ** 2))
-
-    print("CT is ", CT)
-    print("CP is ", CP)
-
-    fig1 = plt.figure(figsize=(12, 6))
-    plt.title('Axial and tangential induction')
-    plt.plot(results[:, 2], results[:, 0], 'r-', label=r'$a$')
-    plt.plot(results[:, 2], results[:, 1], 'g--', label=r'$a^,$')
-    plt.grid()
-    plt.xlabel('r/R')
-    plt.legend()
-    plt.show()
-
-    fig1 = plt.figure(figsize=(12, 6))
-    plt.title(r'Normal and tagential force, non-dimensioned by $\frac{1}{2} \rho U_\infty^2 R$')
-    plt.plot(results[:, 2], results[:, 3] / (0.5 * Uinf ** 2 * Radius), 'r-', label=r'Fnorm')
-    plt.plot(results[:, 2], results[:, 4] / (0.5 * Uinf ** 2 * Radius), 'g--', label=r'Ftan')
-    plt.grid()
-    plt.xlabel('r/R')
-    plt.legend()
-    plt.show()
-
-    fig1 = plt.figure(figsize=(12, 6))
-    plt.title(r'Circulation distribution, non-dimensioned by $\frac{\pi U_\infty^2}{\Omega * NBlades } $')
-    plt.plot(results[:, 2], results[:, 5] / (np.pi * Uinf ** 2 / (NBlades * Omega)), 'r-', label=r'$\Gamma$')
-    plt.grid()
-    plt.xlabel('r/R')
-    plt.legend()
-    plt.show()
