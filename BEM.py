@@ -159,9 +159,9 @@ def read_polar(airfoil: str, plot: bool = False):
     data1 = pd.read_csv(airfoil, header=0,
                         names=["alfa", "cl", "cd", "cm"], sep='\s+')
 
-    polar_alpha = data1['alfa'][1:].to_numpy().astype(float)
-    polar_cl = data1['cl'][1:].to_numpy().astype(float)
-    polar_cd = data1['cd'][1:].to_numpy().astype(float)
+    polar_alpha = data1['alfa'][:].to_numpy().astype(float)
+    polar_cl = data1['cl'][:].to_numpy().astype(float)
+    polar_cd = data1['cd'][:].to_numpy().astype(float)
 
     if plot:
         fig, axs = plt.subplots(1, 2, figsize=(12, 6))
@@ -245,7 +245,7 @@ if __name__ == "__main__":
 
 
 
-    polar_alpha, polar_cl, polar_cd = read_polar(airfoil = 'ARAD8pct_polar.txt', plot=True)
+    polar_alpha, polar_cl, polar_cd = read_polar(airfoil = 'DU95W180.txt', plot=False)
     delta_r_R = .01
     r_R = np.arange(0.2, 1 + delta_r_R / 2, delta_r_R)
 
@@ -255,7 +255,7 @@ if __name__ == "__main__":
     twist_distribution = -14 * (1 - r_R) + pitch  # degrees
 
     # define flow conditions
-    Uinf = 1  # unperturbed wind speed in m/s
+    Uinf = 10  # unperturbed wind speed in m/s
     TSR = 8  # tip speed ratio
     Radius = 50
     NBlades = 3
@@ -266,7 +266,51 @@ if __name__ == "__main__":
     #CT, CP, CQ, results = run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=TSR, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, plot = True)
 
 
-    # plot vs advance ratio
+    # Plot vs TSRs:
+    RESULTS = {}
+    TSRs = [6, 8, 10]
+    colors = ['k', 'g', 'r']
+    for t in TSRs:
+        CTi, CPi, CQi, resultsi = run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=t, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, plot=False, verbose=False)
+        RESULTS[t] = resultsi
+
+    fig1 = plt.figure(figsize=(12, 6))
+    plt.title('Axial and tangential induction')
+    for i, t in enumerate(TSRs):
+        plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 0], color=colors[i], linestyle='-', label=f'$a, \lambda={t}$', )
+        plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 1], color=colors[i], linestyle='--', label=f'$a^, \lambda={t}$',)# linewidth=1.2)
+    plt.grid()
+    plt.xlabel('r/R')
+    plt.legend()
+    plt.show()
+
+    fig1 = plt.figure(figsize=(12, 6))
+    plt.title(r'Normal and tagential force, non-dimensioned by $\frac{1}{2} \rho U_\infty^2 R$')
+    for i, t in enumerate(TSRs):
+        plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 3] / (0.5 * Uinf ** 2 * Radius), color=colors[i], linestyle='-', label=f'Fnorm, $\lambda={t}$',)# linewidth=1.)
+        plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 4] / (0.5 * Uinf ** 2 * Radius), color=colors[i], linestyle='--', label=f'Ftan, $\lambda={t}$', )#linewidth=1.)
+    plt.grid()
+    plt.xlabel('r/R')
+    plt.legend()
+    plt.show()
+
+    fig1 = plt.figure(figsize=(12, 6))
+    plt.title(r'Distribution of AoA and inflow Angle')
+    for i, t in enumerate(TSRs):
+        plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 6], color=colors[i], linestyle='-', label=f'$\\alpha$ [deg.], $\lambda={t}$')
+        plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 7] * 180 / np.pi, color=colors[i], linestyle='--', label=f'$\phi$ [deg.], $\lambda={t}$')
+    plt.grid()
+    plt.xlabel('r/R')
+    plt.legend()
+    plt.show()
+
+
+
+
+
+
+
+    ''' 
     TSRs  = np.linspace(5, 10, 20)
     cts = []
     cqs = []
@@ -276,8 +320,8 @@ if __name__ == "__main__":
         cqs.append(CQ)
     plt.plot(TSRs, cts)
     plt.show()
-
     plt.plot(TSRs, cqs)
     plt.show()
+    '''
 
 
