@@ -122,8 +122,7 @@ def solveStreamtube(Uinf, r1_R, r2_R, rootradius_R, tipradius_R, Omega, Radius, 
         if (np.abs(a - anew) < Erroriterations):
             if verbose: print("iterations", i, np.abs(a - anew))
             break
-
-    return [a, aline, r_R, fnorm, ftan, gamma]
+    return [a, aline, r_R, fnorm, ftan, gamma, alpha, inflowangle]
 
 
 
@@ -182,13 +181,13 @@ def read_polar(airfoil: str, plot: bool = False):
 def run_bem(r_R, chord_distribution, twist_distribution, Uinf, TSR, Radius, NBlades, TipLocation_R, RootLocation_R, plot: bool = True,  verbose: bool = True):
     Omega = Uinf * TSR / Radius
     # solve BEM model
-    results = np.zeros([len(r_R) - 1, 6])
+    results = np.zeros([len(r_R) - 1, 8])
 
     for i in range(len(r_R) - 1):
         chord = np.interp((r_R[i] + r_R[i + 1]) / 2, r_R, chord_distribution)
         twist = np.interp((r_R[i] + r_R[i + 1]) / 2, r_R, twist_distribution)
+        results[i, :] =  solveStreamtube(Uinf, r_R[i], r_R[i + 1], RootLocation_R, TipLocation_R, Omega, Radius, NBlades, chord, twist, polar_alpha, polar_cl, polar_cd, verbose=verbose)
 
-        results[i, :] = solveStreamtube(Uinf, r_R[i], r_R[i + 1], RootLocation_R, TipLocation_R, Omega, Radius, NBlades, chord, twist, polar_alpha, polar_cl, polar_cd, verbose=verbose)
 
     areas = (r_R[1:] ** 2 - r_R[:-1] ** 2) * np.pi * Radius ** 2
     dr = (r_R[1:] - r_R[:-1]) * Radius
@@ -227,17 +226,25 @@ def run_bem(r_R, chord_distribution, twist_distribution, Uinf, TSR, Radius, NBla
         plt.legend()
         plt.show()
 
-    return CT, CP, CQ, results,
+        fig1 = plt.figure(figsize=(12, 6))
+        plt.title(r'AoA distribution')
+        plt.plot(results[:, 2], results[:, 6] , 'r-', label=r'$\alpha$ [deg.]')
+        plt.plot(results[:, 2], results[:, 7], 'g--', label=r'$?$ [deg.]')
+        plt.grid()
+        plt.xlabel('r/R')
+        plt.legend()
+        plt.show()
+    return CT, CP, CQ, results
 
 
 
 if __name__ == "__main__":
-    plot_induction(a = np.arange(-.5, 1, .01))
-    plot_prandtl_corrections(r_R = np.arange(0.1, 1, .01))
+    #plot_induction(a = np.arange(-.5, 1, .01))
+    #plot_prandtl_corrections(r_R = np.arange(0.1, 1, .01))
+
+
+
     polar_alpha, polar_cl, polar_cd = read_polar(airfoil = 'ARAD8pct_polar.txt', plot=True)
-
-
-
     delta_r_R = .01
     r_R = np.arange(0.2, 1 + delta_r_R / 2, delta_r_R)
 
@@ -255,7 +262,7 @@ if __name__ == "__main__":
     TipLocation_R = 1
     RootLocation_R = 0.2
 
-    run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=TSR, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, plot = True)
+    CT, CP, CQ, results = run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=TSR, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, plot = True)
 
 
 
