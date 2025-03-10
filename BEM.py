@@ -191,9 +191,10 @@ def run_bem(r_R, chord_distribution, twist_distribution, Uinf, TSR, Radius, NBla
 
     areas = (r_R[1:] ** 2 - r_R[:-1] ** 2) * np.pi * Radius ** 2
     dr = (r_R[1:] - r_R[:-1]) * Radius
+    r = np.cumsum(dr)
     CT = np.sum(dr * results[:, 3] * NBlades / (0.5 * Uinf ** 2 * np.pi * Radius ** 2))
     CP = np.sum(dr * results[:, 4] * results[:, 2] * NBlades * Radius * Omega / (0.5 * Uinf ** 3 * np.pi * Radius ** 2))
-    CQ = 0
+    CQ = np.sum(dr * results[:, 4]*NBlades / (1/2 * Uinf**2 * np.pi * Radius**2))
 
     print("CT is ", CT)
     print("CP is ", CP)
@@ -227,9 +228,9 @@ def run_bem(r_R, chord_distribution, twist_distribution, Uinf, TSR, Radius, NBla
         plt.show()
 
         fig1 = plt.figure(figsize=(12, 6))
-        plt.title(r'AoA distribution')
+        plt.title(r'Distribution of AoA and inflow Angle')
         plt.plot(results[:, 2], results[:, 6] , 'r-', label=r'$\alpha$ [deg.]')
-        plt.plot(results[:, 2], results[:, 7], 'g--', label=r'$?$ [deg.]')
+        plt.plot(results[:, 2], results[:, 7]* 180 / np.pi, 'g--', label=r'$\phi$ [deg.]')
         plt.grid()
         plt.xlabel('r/R')
         plt.legend()
@@ -262,7 +263,21 @@ if __name__ == "__main__":
     TipLocation_R = 1
     RootLocation_R = 0.2
 
-    CT, CP, CQ, results = run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=TSR, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, plot = True)
+    #CT, CP, CQ, results = run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=TSR, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, plot = True)
 
+
+    # plot vs advance ratio
+    TSRs  = np.linspace(5, 10, 20)
+    cts = []
+    cqs = []
+    for tsr in TSRs:
+        CT, CP, CQ, _ = run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=tsr, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, plot = False)
+        cts.append(CT)
+        cqs.append(CQ)
+    plt.plot(TSRs, cts)
+    plt.show()
+
+    plt.plot(TSRs, cqs)
+    plt.show()
 
 
