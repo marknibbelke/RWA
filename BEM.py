@@ -194,7 +194,8 @@ def run_bem(r_R, chord_distribution, twist_distribution, Uinf, TSR, Radius, NBla
     r = np.cumsum(dr)
     CT = np.sum(dr * results[:, 3] * NBlades / (0.5 * Uinf ** 2 * np.pi * Radius ** 2))
     CP = np.sum(dr * results[:, 4] * results[:, 2] * NBlades * Radius * Omega / (0.5 * Uinf ** 3 * np.pi * Radius ** 2))
-    CQ = np.sum(dr * results[:, 4]*NBlades / (1/2 * Uinf**2 * np.pi * Radius**2))
+    #CQ = np.sum(dr * results[:, 4]*NBlades / (1/2 * Uinf**2 * np.pi * Radius**2))
+    CQ = np.sum(dr * results[:, 4] * results[:, 2] * NBlades * Radius / (1 / 2 * Uinf ** 2 * np.pi * Radius ** 3))
 
     print("CT is ", CT)
     print("CP is ", CP)
