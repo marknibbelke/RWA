@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import required as rq
 import pandas as pd
 np.set_printoptions(linewidth=7000)
 
