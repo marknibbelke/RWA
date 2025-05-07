@@ -1,6 +1,7 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
+import  numpy as np
+import  matplotlib.pyplot as plt
+import  pandas as pd
+from    abc import ABC, abstractmethod
 from scipy.optimize import newton_krylov,root,fixed_point
 np.set_printoptions(linewidth=7000)
 
@@ -367,7 +368,7 @@ if __name__ == "__main__":
     s_Array[-1] = np.pi
     r_array = -1 * (np.cos(s_Array) - 1) / 2 * 0.8 + 0.2
     theta_array = np.arange(0, revolutions * 2 * np.pi, np.pi / 10)  # np.linspace(0, revolutions*2*np.pi, k2-1)
-    ri_elem_boundaries = r_array*R# cosine_spacing(0.2 * R, R, N)#   #cosine_spacing(0.2 * R, R, N)# [:-1]*1.00705  # np.linspace(rotorbounds_r[0]*R, R, N+1)#[:-1] #
+    ri_elem_boundaries = r_array*R# cosine_spacing(0.2 * R, R, N)#     #cosine_spacing(0.2 * R, R, N)# [:-1]*1.00705  # np.linspace(rotorbounds_r[0]*R, R, N+1)#[:-1] #
     print(1/2*(ri_elem_boundaries[:-1]+ri_elem_boundaries[1:])/R)
     Qinf = np.array([1, 0, 0])
     polar_alpha, polar_cl, polar_cd = read_polar(airfoil='../DU95W180.txt', plot=False)
