@@ -99,7 +99,7 @@ class WingSim(VortexSim):
         super().__init__(xyzi, xyzj, ni, Qinf)
         self.results = {}
 
-    def iter_solve(self, *args, **kwargs):
+    def direct_solve(self, *args, **kwargs):
         pass
 
     def iter_solve(self, niter=200, convweight=0.01, tol=1e-6, plot: bool = True)->None:
@@ -144,7 +144,7 @@ class RotorWakeSim(VortexSim):
         self.chords, self.twists = geomfunc(self.radial_positions / R)
         self.results = {}
 
-    def iter_solve(self, *args, **kwargs):
+    def direct_solve(self, *args, **kwargs):
         pass
 
     def iter_solve(self, Omega, convweightbound, niter=600, tol=1e-4, plot: bool = True)->dict:
