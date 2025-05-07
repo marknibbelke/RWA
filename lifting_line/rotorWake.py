@@ -193,6 +193,7 @@ class RotorWakeSim(VortexSim):
             return gamma_new - gammas
 
         sol = root(F, gammas0, method=method, tol=tol, options={'maxiter': niter, 'disp': True})
+        print(sol.message)
         uvw = np.einsum('ijk, j -> ik', uvws, sol.x)
         vel1s = Qinf[None, :] + uvw + vrot
         vazim = np.einsum('ij,ij->i', azimdir, vel1s)
@@ -382,7 +383,7 @@ def rotor_wake(theta_array, ri_elem_boundaries, N: int, geom_func: callable, R, 
 
 if __name__ == "__main__":
     'simulation parameters'
-    N = 11
+    N = 17
     revolutions = 50
     TSR = 6.0
     R = 50
@@ -395,12 +396,12 @@ if __name__ == "__main__":
     s_Array[-1] = np.pi
     r_array = -1 * (np.cos(s_Array) - 1) / 2 * 0.8 + 0.2
     theta_array = np.arange(0, revolutions * 2 * np.pi, np.pi / 10)
-    ri_elem_boundaries = r_array * R  # cosine_spacing(0.2 * R, R, N)#
+    ri_elem_boundaries = cosine_spacing(0.2 * R, R, N)#r_array * R  #
     print(1 / 2 * (ri_elem_boundaries[:-1] + ri_elem_boundaries[1:]) / R)
     xyzi, xyzj, ni, ri = rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=rotor_blade, R=R, TSR=TSR / (1 - aw), nblades=nblades, plot=True, fbound=0., fcp=0., )
 
     'simulation'
     ROTORSIM = RotorWakeSim(xyzi=xyzi, xyzj=xyzj, ni=ni, Qinf=Qinf, R=R, geomfunc=rotor_blade, nblades=nblades, elem_boundaries=ri_elem_boundaries)
-    ROTORSIM.iter_solve(Omega=TSR/R, niter=1200, tol=0.001, plot=True)
+    ROTORSIM.iter_solve(Omega=TSR/R, niter=1200, tol=1e-8, plot=True)
     resLL = ROTORSIM.results
     print(f'(CT, CP) = ({resLL["CT"]:.2f},{resLL["CP"]:.2f})')
