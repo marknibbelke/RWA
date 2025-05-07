@@ -190,7 +190,7 @@ class RotorWakeSim(VortexSim):
         self.results['aline'] = np.average(aline, axis=0) / normFax
         self.results['Omega'] = Omega
         self.results['TSR'] = Omega * self.R
-        self.calculateCT_CProtor_CPflow()
+        self.calculateCT_CProtor_CPflow(np.average(Faxial, axis=0), np.average(Fazim, axis=0))
         if plot:
             print(f'\nPlotting results:\nTSR={Omega * self.R}, N={uvws.shape[0]}\n')
             fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(7, 8))
@@ -245,13 +245,13 @@ class RotorWakeSim(VortexSim):
         gamma = 0.5 * np.sqrt(vmag2) * cl * self.chords
         return fnorm, ftan, gamma, alpha, inflowangle
 
-    def calculateCT_CProtor_CPflow(self,)->None:
-        r_Rarray = self.elem_bounds
+    def calculateCT_CProtor_CPflow(self, Faxial, Fazim)->None:
+        r_Rarray = self.elem_bounds/self.R
         r_R_temp = 1 / 2 * (r_Rarray[:-1] + r_Rarray[1:])
         drtemp = np.diff(r_Rarray)
         Uinf = np.linalg.norm(self.Qinf)
-        self.results['CT'] = np.sum(drtemp * self.results['Faxial'] * self.nblades / (0.5 * Uinf ** 2 * np.pi * self.R))
-        self.results['CP'] = np.sum(drtemp * self.results['Fazim']  * r_R_temp * self.results['Omega']  * self.nblades / (0.5 * Uinf ** 2 * np.pi))
+        self.results['CT'] = np.sum(drtemp * Faxial * self.nblades / (0.5 * Uinf ** 2 * np.pi * self.R))
+        self.results['CP'] = np.sum(drtemp * Fazim  * r_R_temp * self.results['Omega']  * self.nblades / (0.5 * Uinf ** 2 * np.pi))
 
 
 
@@ -391,3 +391,4 @@ if __name__ == "__main__":
     ROTORSIM = RotorWakeSim(xyzi=xyzi, xyzj=xyzj, ni=ni, Qinf=Qinf, R=R, geomfunc=rotor_blade, nblades=nblades, elem_boundaries=ri_elem_boundaries)
     ROTORSIM.iter_solve(Omega=TSR/R, convweightbound=0.1, niter=1200, tol=0.001, plot=True)
     resLL = ROTORSIM.results
+    print(f'(CT, CP) = ({resLL["CT"]:.2f},{resLL["CP"]:.2f})')
