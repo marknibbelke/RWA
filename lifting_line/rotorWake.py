@@ -88,8 +88,9 @@ class VortexSim(ABC):
 
 
 class RotorWakeSim(VortexSim):
-    def __init__(self, xyzi, xyzj, ni, Qinf, R, geomfunc:callable, nblades: int = 3, airfoil: str = '../DU95W180.txt'):
+    def __init__(self, xyzi, xyzj, ni, elem_boundaries, Qinf, R, geomfunc:callable, nblades: int = 3, airfoil: str = '../DU95W180.txt'):
         super().__init__(xyzi, xyzj, ni, Qinf)
+        self.elem_bounds = elem_boundaries
         self.R = R
         self.nblades = nblades
         self.geomfunc = geomfunc
@@ -152,6 +153,9 @@ class RotorWakeSim(VortexSim):
         self.results['Fazim'] = np.average(Fazim, axis=0) / normFax
         self.results['a'] = np.average(a, axis=0) / normFax
         self.results['aline'] = np.average(aline, axis=0) / normFax
+        self.results['Omega'] = Omega
+        self.results['TSR'] = Omega * self.R
+        self.calculateCT_CProtor_CPflow()
         if plot:
             print(f'\nPlotting results:\nTSR={Omega * self.R}, N={uvws.shape[0]}\n')
             fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(7, 8))
@@ -205,6 +209,15 @@ class RotorWakeSim(VortexSim):
         ftan = lift * np.sin(inflowangle) - drag * np.cos(inflowangle)
         gamma = 0.5 * np.sqrt(vmag2) * cl * self.chords
         return fnorm, ftan, gamma, alpha, inflowangle
+
+    def calculateCT_CProtor_CPflow(self,)->None:
+        r_Rarray = self.elem_bounds
+        r_R_temp = 1 / 2 * (r_Rarray[:-1] + r_Rarray[1:])
+        drtemp = np.diff(r_Rarray)
+        Uinf = np.linalg.norm(self.Qinf)
+        self.results['CT'] = np.sum(drtemp * self.results['Faxial'] * self.nblades / (0.5 * Uinf ** 2 * np.pi * self.R))
+        self.results['CP'] = np.sum(drtemp * self.results['Fazim']  * r_R_temp * self.results['Omega']  * self.nblades / (0.5 * Uinf ** 2 * np.pi))
+
 
 
 def rotor_blade(r_R):
@@ -303,5 +316,6 @@ if __name__ == "__main__":
     print(1 / 2 * (ri_elem_boundaries[:-1] + ri_elem_boundaries[1:]) / R)
     Qinf = np.array([1, 0, 0])
     xyzi, xyzj, ni, ri = rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=rotor_blade, R=R, TSR=TSR / (1 - aw), nblades=nblades, plot=True, fbound=0., fcp=0., )
-    ROTORSIM = RotorWakeSim(xyzi=xyzi, xyzj=xyzj, ni=ni, Qinf=Qinf, R=R, geomfunc=rotor_blade, nblades=nblades)
+    ROTORSIM = RotorWakeSim(xyzi=xyzi, xyzj=xyzj, ni=ni, Qinf=Qinf, R=R, geomfunc=rotor_blade, nblades=nblades, elem_boundaries=ri_elem_boundaries)
     ROTORSIM.iter_solve(Omega=TSR/R, convweightbound=0.1, niter=1200, tol=0.001, plot=True)
+    resLL = ROTORSIM.results
