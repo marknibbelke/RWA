@@ -1,10 +1,7 @@
-from functools import partial
-from scipy.special import legendre
 import numpy as np
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
 from    abc import ABC, abstractmethod
-from scipy.optimize import newton_krylov,root,fixed_point
 import pandas as pd
 np.set_printoptions(linewidth=7000)
 
@@ -15,13 +12,13 @@ class VortexSim(ABC):
         self.xyzj = xyzj
         self.ni = ni
         self.Qinf = Qinf
-        self.uvws, self.A, self.B, self.br = self.assemble_vortex_system(Qinf=Qinf,)
+        self.uvws, self.A, self.B, self.br = self._assemble_vortex_system(Qinf=Qinf,)
 
     @abstractmethod
     def iter_solve(self, *args,**kwargs):
         pass
 
-    def assemble_vortex_system(self, Qinf, bound_idx=None, CORE=1e-5, Omegavec=np.zeros(3)):
+    def _assemble_vortex_system(self, Qinf, bound_idx=None, CORE=1e-5, Omegavec=np.zeros(3)):
         '''
         N := number of collocation nodes
         k-1 := dimension of each filament ring
@@ -84,6 +81,13 @@ class VortexSim(ABC):
         Qinf = Qinf[None, :] + vrot
         br = np.einsum('ki, ki->k', -Qinf, self.ni)
         return uvws, A, B, br
+
+    def update(self, xyzi_new, xyzj_new, ni_new, Qinf_new)->None:
+        self.xyzi = xyzi_new
+        self.xyzj = xyzj_new
+        self.ni = ni_new
+        self.Qinf = Qinf_new
+        self.uvws, self.A, self.B, self.br = self._assemble_vortex_system(Qinf=Qinf_new, )
 
 
 
