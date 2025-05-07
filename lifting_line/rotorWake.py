@@ -1,8 +1,7 @@
-import numpy as np
-from dataclasses import dataclass
-import matplotlib.pyplot as plt
+import  numpy                as np
+import  matplotlib.pyplot    as plt
+import  pandas               as pd
 from    abc import ABC, abstractmethod
-import pandas as pd
 np.set_printoptions(linewidth=7000)
 
 
@@ -100,6 +99,9 @@ class WingSim(VortexSim):
         super().__init__(xyzi, xyzj, ni, Qinf)
         self.results = {}
 
+    def iter_solve(self, *args, **kwargs):
+        pass
+
     def iter_solve(self, niter=200, convweight=0.01, tol=1e-6, plot: bool = True)->None:
         uvws = np.sum(self.uvws, axis=2)
         gammas = np.zeros(self.xyzi.shape[0])
@@ -141,6 +143,9 @@ class RotorWakeSim(VortexSim):
         self.radial_positions = np.sqrt(np.einsum('ij, ij->i', xyzi, xyzi))
         self.chords, self.twists = geomfunc(self.radial_positions / R)
         self.results = {}
+
+    def iter_solve(self, *args, **kwargs):
+        pass
 
     def iter_solve(self, Omega, convweightbound, niter=600, tol=1e-4, plot: bool = True)->dict:
         uvws = np.sum(self.uvws, axis=2)
@@ -260,7 +265,6 @@ class RotorWakeSim(VortexSim):
         Uinf = np.linalg.norm(self.Qinf)
         self.results['CT'] = np.sum(drtemp * Faxial * self.nblades / (0.5 * Uinf ** 2 * np.pi * self.R))
         self.results['CP'] = np.sum(drtemp * Fazim  * r_R_temp * self.results['Omega']  * self.nblades / (0.5 * Uinf ** 2 * np.pi))
-
 
 
 def rotor_blade(r_R):
