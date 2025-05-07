@@ -1,7 +1,8 @@
 import  numpy                as np
 import  matplotlib.pyplot    as plt
 import  pandas               as pd
-from    abc import ABC, abstractmethod
+from    abc                  import ABC, abstractmethod
+from    scipy.optimize       import newton_krylov,root
 np.set_printoptions(linewidth=7000)
 
 
@@ -147,86 +148,77 @@ class RotorWakeSim(VortexSim):
     def direct_solve(self, *args, **kwargs):
         pass
 
-    def iter_solve(self, Omega, convweightbound, niter=600, tol=1e-4, plot: bool = True)->dict:
-        uvws = np.sum(self.uvws, axis=2)
-        gammas = np.zeros(xyzi.shape[0])
-        GAMMAS_new = np.zeros_like(gammas)
-        Omega_vec = np.array([-Omega, 0, 0])
+    def plot_results(self)->None:
+        fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(7, 8))
+        axes[0].plot(self.results['r_R'], self.results['Gamma'], marker='o', label='$\Gamma$')
+        axes[0].grid()
+        axes[0].set_ylim(bottom=0)
+        axes[0].set_ylabel('$\\tilde{\Gamma}$')
+        axes[0].legend()
+        axes[1].plot(self.results['r_R'], self.results['Faxial'], marker='o', label='$F_{axial}$')
+        axes[1].plot(self.results['r_R'], self.results['Fazim'], marker='o', label='$F_{azim}$')
+        axes[1].set_ylim(bottom=0)
+        axes[1].set_ylabel('$\\tilde{F}$')
+        axes[1].grid()
+        axes[1].legend()
+        axes[2].plot(self.results['r_R'], self.results['a'], marker='o', label='$a$')
+        axes[2].plot(self.results['r_R'], self.results['aline'], marker='o', label='$a^{,}$')
+        axes[2].set_ylim(bottom=0)
+        axes[2].grid()
+        axes[2].legend()
+        axes[2].set_xlabel('$r/R$')
+        axes[2].set_ylabel('$a$')
+        fig.tight_layout()
+        plt.show()
 
+    def iter_solve(self, Omega, niter=600, tol=1e-6, plot: bool = True, method='broyden1')->dict:
+        uvws = np.sum(self.uvws, axis=2)
+        Omega_vec = np.array([-Omega, 0, 0])
+        N = xyzi.shape[0]
+        gammas0 = np.zeros(N)
         eijk = np.zeros((3, 3, 3), dtype=int)
         eijk[0, 1, 2] = eijk[1, 2, 0] = eijk[2, 0, 1] = 1
         eijk[0, 2, 1] = eijk[2, 1, 0] = eijk[1, 0, 2] = -1
         orthogonals = np.array([-1 / self.radial_positions, np.zeros_like(self.radial_positions), np.zeros_like(self.radial_positions)]).T
         vrot = np.einsum('ijk, ...j, ...k', eijk, Omega_vec, self.xyzi)
         azimdir = np.einsum('ijk, ...j, ...k', eijk, orthogonals, self.xyzi)
-        temploads = np.zeros(1)
-        aline = a = 0
-        N = uvws.shape[0]
-        A = uvws.reshape(3 * N, N)
-        U, s, Vh = np.linalg.svd(A)
-        spectral_radius = np.max(np.real(s))
-        OMEGA = .9 * 2 / (spectral_radius)
-        print(spectral_radius, OMEGA)
-        for k in range(niter):
-            gammas = GAMMAS_new.copy()
+
+        def F(gammas):
             uvw = np.einsum('ijk, j -> ik', uvws, gammas)
-            vel1s = self.Qinf[None, :] + uvw + vrot
+            vel1s = Qinf[None, :] + uvw + vrot
             vazim = np.einsum('ij,ij->i', azimdir, vel1s)
             vaxial = vel1s[:, 0]
-            temploads = self._loadBladeElement(vaxial, vazim, )
-            GAMMAS_new = temploads[2].copy()
-            a = -(uvw[:, 0] + vrot[:, 0] / self.Qinf[0])
-            aline = vazim / (self.radial_positions * Omega) - 1
+            temploads = self._loadBladeElement(vaxial, vazim,)
+            gamma_new = temploads[2].copy()
+            return gamma_new - gammas
 
-            refererror = np.max(abs(GAMMAS_new))
-            refererror = max(refererror, 0.001)
-            error = np.max(abs(GAMMAS_new - gammas))
-            error = error / refererror
-            convweight = min(OMEGA, convweightbound)
-            print(k, error, refererror, convweight)
-            GAMMAS_new = (1 - convweight) * gammas + convweight * GAMMAS_new
-            if error <= tol:  print(f'Iter. ended at k={k}'); break
+        sol = root(F, gammas0, method=method, tol=tol, options={'maxiter': niter, 'disp': True})
+        uvw = np.einsum('ijk, j -> ik', uvws, sol.x)
+        vel1s = Qinf[None, :] + uvw + vrot
+        vazim = np.einsum('ij,ij->i', azimdir, vel1s)
+        vaxial = vel1s[:, 0]
+        temploads =  self._loadBladeElement(vaxial, vazim,)
         r_R = self.radial_positions / self.R
         r_R = r_R.reshape(nblades, int(r_R.size / self.nblades))
-        GAMMAS_new = GAMMAS_new.reshape(self.nblades, int(r_R.size / self.nblades))
+        aline = (vazim / (self.radial_positions * Omega) - 1).reshape(self.nblades, int(r_R.size / self.nblades))
+        a = -(uvw[:, 0] + vrot[:, 0] / Qinf[0]).reshape(self.nblades, int(r_R.size / self.nblades))
+        GAMMAS_new = sol.x.reshape(self.nblades, int(r_R.size / self.nblades))
         normGamma = np.linalg.norm(self.Qinf) ** 2 * np.pi / (self.nblades * Omega)
         Faxial = temploads[0].reshape(self.nblades, int(r_R.size / self.nblades))
         Fazim = temploads[1].reshape(self.nblades, int(r_R.size / self.nblades))
         normFax = .5 * np.linalg.norm(self.Qinf) ** 2 * self.R
-        a = a.reshape(self.nblades, int(r_R.size / self.nblades))
-        aline = aline.reshape(self.nblades, int(r_R.size / self.nblades))
         self.results['r_R'] = r_R[0]
         self.results['Gamma'] = np.average(GAMMAS_new, axis=0) / normGamma
         self.results['Faxial'] = np.average(Faxial, axis=0) / normFax
         self.results['Fazim'] = np.average(Fazim, axis=0) / normFax
-        self.results['a'] = np.average(a, axis=0) / normFax
-        self.results['aline'] = np.average(aline, axis=0) / normFax
+        self.results['a'] = np.average(a, axis=0)
+        self.results['aline'] = np.average(aline, axis=0)
         self.results['Omega'] = Omega
         self.results['TSR'] = Omega * self.R
         self._calculateCT_CProtor_CPflow(np.average(Faxial, axis=0), np.average(Fazim, axis=0))
         if plot:
             print(f'\nPlotting results:\nTSR={Omega * self.R}, N={uvws.shape[0]}\n')
-            fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(7, 8))
-            axes[0].plot(self.results['r_R'], self.results['Gamma'], marker='o', label='$\Gamma$')
-            axes[0].grid()
-            axes[0].set_ylim(bottom=0)
-            axes[0].set_ylabel('$\\tilde{\Gamma}$')
-            axes[0].legend()
-            axes[1].plot(self.results['r_R'], self.results['Faxial'], marker='o', label='$F_{axial}$')
-            axes[1].plot(self.results['r_R'], self.results['Fazim'], marker='o', label='$F_{azim}$')
-            axes[1].set_ylim(bottom=0)
-            axes[1].set_ylabel('$\\tilde{F}$')
-            axes[1].grid()
-            axes[1].legend()
-            axes[2].plot(self.results['r_R'], self.results['a'], marker='o', label='$a$')
-            axes[2].plot(self.results['r_R'], self.results['aline'], marker='o', label='$a^{,}$')
-            axes[2].set_ylim(bottom=0)
-            axes[2].grid()
-            axes[2].legend()
-            axes[2].set_xlabel('$r/R$')
-            axes[2].set_ylabel('$a$')
-            fig.tight_layout()
-            plt.show()
+            self.plot_results()
         # print(gammas)
         return self.results
 
@@ -409,6 +401,6 @@ if __name__ == "__main__":
 
     'simulation'
     ROTORSIM = RotorWakeSim(xyzi=xyzi, xyzj=xyzj, ni=ni, Qinf=Qinf, R=R, geomfunc=rotor_blade, nblades=nblades, elem_boundaries=ri_elem_boundaries)
-    ROTORSIM.iter_solve(Omega=TSR/R, convweightbound=0.1, niter=1200, tol=0.001, plot=True)
+    ROTORSIM.iter_solve(Omega=TSR/R, niter=1200, tol=0.001, plot=True)
     resLL = ROTORSIM.results
     print(f'(CT, CP) = ({resLL["CT"]:.2f},{resLL["CP"]:.2f})')
