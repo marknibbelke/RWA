@@ -351,8 +351,8 @@ def calculateCT_CProtor_CPflow(Fnorm,Ftan, Uinf, r_Rarray, Omega, Radius, NBlade
 
 
 if __name__ == "__main__":
-    N = 11
-    revolutions = 3.0
+    N = 12
+    revolutions = 50
     TSR = 6.0
     R = 50
     nblades = 3
