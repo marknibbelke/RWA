@@ -87,6 +87,41 @@ class VortexSim(ABC):
 
 
 
+class WingSim(VortexSim):
+    def __init__(self, xyzi, xyzj, ni, Qinf,):
+        super().__init__(xyzi, xyzj, ni, Qinf)
+        self.results = {}
+
+    def iter_solve(self, niter=200, convweight=0.01, tol=1e-6, plot: bool = True)->None:
+        uvws = np.sum(self.uvws, axis=2)
+        gammas = np.zeros(self.xyzi.shape[0])
+        GAMMAS_new = np.zeros_like(gammas)
+        CLnew = 0
+        for k in range(niter):
+            gammas = GAMMAS_new.copy()
+            uvw = np.einsum('ijk, j -> ik', uvws, gammas)
+            vel1s = self.Qinf[None, :] + uvw
+            angle1s = np.arctan2(vel1s[:, 2], vel1s[:, 0])
+            CLnew = 2 * np.pi * np.sin(angle1s)
+            vmags = np.linalg.norm(vel1s, axis=1)
+            GAMMAS_new = 0.5 * 1 * vmags * CLnew
+            GAMMAS_new = (1 - convweight) * gammas + convweight * GAMMAS_new
+            error = max(abs(np.subtract(GAMMAS_new, gammas)))
+            if error <= tol:  print(f'Iter. ended at k={k}'); break
+        self.results['y'] = xyzi[:, 1]
+        self.results['CL'] = CLnew
+        if plot:
+            plt.figure(figsize=(8, 3))
+            plt.plot(self.results['y'] , self.results['CL'] , marker='o')
+            plt.ylim([0, 1.05 * np.max(self.results['CL'])])
+            plt.grid(True)
+            plt.xlabel('y')
+            plt.ylabel('$C_l(y)$')
+            plt.tight_layout()
+            plt.show()
+
+
+
 class RotorWakeSim(VortexSim):
     def __init__(self, xyzi, xyzj, ni, elem_boundaries, Qinf, R, geomfunc:callable, nblades: int = 3, airfoil: str = '../DU95W180.txt'):
         super().__init__(xyzi, xyzj, ni, Qinf)
@@ -99,7 +134,7 @@ class RotorWakeSim(VortexSim):
         self.chords, self.twists = geomfunc(self.radial_positions / R)
         self.results = {}
 
-    def iter_solve(self, Omega, convweightbound, niter=600, tol=1e-4, plot: bool = True):
+    def iter_solve(self, Omega, convweightbound, niter=600, tol=1e-4, plot: bool = True)->dict:
         uvws = np.sum(self.uvws, axis=2)
         gammas = np.zeros(xyzi.shape[0])
         GAMMAS_new = np.zeros_like(gammas)
@@ -225,6 +260,43 @@ def rotor_blade(r_R):
     chord = 3 * (1 - r_R) + 1
     twist = -14 * (1 - r_R)
     return chord, np.radians(twist + pitch)
+
+def cosine_spacing(a, b, N):
+    theta = np.linspace(0, np.pi, N + 1)
+    x = 0.5 * (a + b) + 0.5 * (b - a) * np.cos(theta)
+    return np.flip(x)
+
+def planar_wing(N: int, c, b, Lwake, alpha, spacing: str = 'cosine', fcp = 3/4, fbound = 1/4):
+    '''
+    :param N: number of partitions
+    :param c: chord length
+    :param b: span
+    :param Lwake: trailing vortex length
+    :param alpha: [rad.] angle of attack
+    :param spacing: (str) spacing type: cosine or other (uniform)
+    :param fcp: c_{control point} / c
+    :param fbound: c_{bound vortex} / c
+    :return:
+        xyzi: [N, 3], collocation node coordinates
+        xyzj: [N, k, 3], vortex ring coordinates, k-1 := dimension of the ring
+        ni:   [N, 3], normal vectors
+    '''
+    yi_elem_boundaries = cosine_spacing(0, b, N)
+    if spacing != 'cosine': yi_elem_boundaries = np.linspace(0, b, N+1)
+    yi = 1/2*(yi_elem_boundaries[:-1] + yi_elem_boundaries[1:])
+    xyzi = np.stack((fcp*c*np.ones_like(yi), yi, np.zeros_like(yi))).T
+    ni = np.tile([0,0,1], N).reshape(N,3)
+    xyzj = np.array([
+        np.array([
+            [Lwake, y0, Lwake*np.sin(alpha)],
+            [1.25*c, y0, 0],
+            [c*fbound, y0, 0],
+            [c*fbound, y1, 0],
+            [1.25*c, y1, 0],
+            [Lwake, y1, Lwake*np.sin(alpha)]
+        ]) for y0, y1 in zip(yi_elem_boundaries[:-1], yi_elem_boundaries[1:])
+    ])
+    return xyzi, xyzj, ni
 
 
 def rotor_wake(theta_array, ri_elem_boundaries, N: int, geom_func: callable, R, TSR, nblades: int, fcp=0.75, fbound = 1/4, plot: bool = False):
