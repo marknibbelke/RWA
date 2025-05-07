@@ -378,20 +378,25 @@ def rotor_wake(theta_array, ri_elem_boundaries, N: int, geom_func: callable, R, 
 
 
 if __name__ == "__main__":
+    'simulation parameters'
     N = 11
     revolutions = 50
     TSR = 6.0
     R = 50
     nblades = 3
     aw = 0.2
+    Qinf = np.array([1, 0, 0])
+
+    'generate geometry'
     s_Array = np.arange(0, np.pi, np.pi / (N + 1))
     s_Array[-1] = np.pi
     r_array = -1 * (np.cos(s_Array) - 1) / 2 * 0.8 + 0.2
     theta_array = np.arange(0, revolutions * 2 * np.pi, np.pi / 10)
     ri_elem_boundaries = r_array * R  # cosine_spacing(0.2 * R, R, N)#
     print(1 / 2 * (ri_elem_boundaries[:-1] + ri_elem_boundaries[1:]) / R)
-    Qinf = np.array([1, 0, 0])
     xyzi, xyzj, ni, ri = rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=rotor_blade, R=R, TSR=TSR / (1 - aw), nblades=nblades, plot=True, fbound=0., fcp=0., )
+
+    'simulation'
     ROTORSIM = RotorWakeSim(xyzi=xyzi, xyzj=xyzj, ni=ni, Qinf=Qinf, R=R, geomfunc=rotor_blade, nblades=nblades, elem_boundaries=ri_elem_boundaries)
     ROTORSIM.iter_solve(Omega=TSR/R, convweightbound=0.1, niter=1200, tol=0.001, plot=True)
     resLL = ROTORSIM.results
