@@ -15,7 +15,11 @@ class VortexSim(ABC):
         self.uvws, self.A, self.B, self.br = self._assemble_vortex_system(Qinf=Qinf,)
 
     @abstractmethod
-    def iter_solve(self, *args,**kwargs):
+    def iter_solve(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def direct_solve(self, *args, **kwargs):
         pass
 
     def _assemble_vortex_system(self, Qinf, bound_idx=None, CORE=1e-5, Omegavec=np.zeros(3)):
