@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from scipy.optimize import newton_krylov,root, fixed_point
+from scipy.optimize import newton_krylov,root,fixed_point
 np.set_printoptions(linewidth=7000)
 
 
@@ -370,7 +370,8 @@ if __name__ == "__main__":
     a, aline, r_R, temploads = iter_solve_rotor_wake(niter=10000, uvws=uvws, Qinf=Qinf, xyzi=xyzi, Omega=TSR/R, Radius=R, convweight0=(0.1,0.1), geomfunc=rotor_blade, polar_alpha=np.radians(polar_alpha), polar_cd=polar_cd, polar_cl=polar_cl,  nblades=nblades)
     Faxial = temploads[0].reshape(nblades, int(r_R.size / nblades))
     Fazim = temploads[1].reshape(nblades, int(r_R.size / nblades))
-    print(f'(CT, CP) = {calculateCT_CProtor_CPflow(Fnorm=np.average(Faxial, axis=0), Ftan=np.average(Fazim, axis=0), Uinf=np.linalg.norm(Qinf), r_Rarray=ri_elem_boundaries / R, Omega=TSR/R, Radius=R, NBlades=nblades)}')
+    CT, CP = calculateCT_CProtor_CPflow(Fnorm=np.average(Faxial, axis=0), Ftan=np.average(Fazim, axis=0), Uinf=np.linalg.norm(Qinf), r_Rarray=ri_elem_boundaries / R, Omega=TSR/R, Radius=R, NBlades=nblades)
+    print(f'(CT, CP) = ({CT:.2f},{CP:.2f})')
 
     #iter_solve_rotor_wake_2(niter=5000, uvws=uvws, Qinf=Qinf, xyzi=xyzi, Omega=TSR / R, Radius=R, convweight0=(0.9, .3), geomfunc=rotor_blade, polar_alpha=np.radians(polar_alpha), polar_cd=polar_cd, polar_cl=polar_cl, nblades=nblades)
 
