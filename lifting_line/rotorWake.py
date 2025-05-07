@@ -164,7 +164,7 @@ class RotorWakeSim(VortexSim):
             vel1s = self.Qinf[None, :] + uvw + vrot
             vazim = np.einsum('ij,ij->i', azimdir, vel1s)
             vaxial = vel1s[:, 0]
-            temploads = self.loadBladeElement(vaxial, vazim,)
+            temploads = self._loadBladeElement(vaxial, vazim, )
             GAMMAS_new = temploads[2].copy()
             a = -(uvw[:, 0] + vrot[:, 0] / self.Qinf[0])
             aline = vazim / (self.radial_positions * Omega) - 1
@@ -194,7 +194,7 @@ class RotorWakeSim(VortexSim):
         self.results['aline'] = np.average(aline, axis=0) / normFax
         self.results['Omega'] = Omega
         self.results['TSR'] = Omega * self.R
-        self.calculateCT_CProtor_CPflow(np.average(Faxial, axis=0), np.average(Fazim, axis=0))
+        self._calculateCT_CProtor_CPflow(np.average(Faxial, axis=0), np.average(Fazim, axis=0))
         if plot:
             print(f'\nPlotting results:\nTSR={Omega * self.R}, N={uvws.shape[0]}\n')
             fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(7, 8))
@@ -236,7 +236,7 @@ class RotorWakeSim(VortexSim):
             plt.show()
         return np.radians(polar_alpha), polar_cl, polar_cd
 
-    def loadBladeElement(self, vnorm, vtan,):
+    def _loadBladeElement(self, vnorm, vtan, ):
         vmag2 = vnorm ** 2 + vtan ** 2
         inflowangle = np.arctan2(vnorm, vtan)
         alpha = self.twists + inflowangle
@@ -249,7 +249,7 @@ class RotorWakeSim(VortexSim):
         gamma = 0.5 * np.sqrt(vmag2) * cl * self.chords
         return fnorm, ftan, gamma, alpha, inflowangle
 
-    def calculateCT_CProtor_CPflow(self, Faxial, Fazim)->None:
+    def _calculateCT_CProtor_CPflow(self, Faxial, Fazim)->None:
         r_Rarray = self.elem_bounds/self.R
         r_R_temp = 1 / 2 * (r_Rarray[:-1] + r_Rarray[1:])
         drtemp = np.diff(r_Rarray)
