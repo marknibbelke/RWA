@@ -29,12 +29,15 @@ def ainduction(CT):
     a[CT < CT2] = 0.5 - 0.5 * np.sqrt(1 - CT[CT < CT2])
     return a
 
+
 def PrandtlTipRootCorrection(r_R, rootradius_R, tipradius_R, TSR, NBlades, axial_induction):
     """
     This function calcualte steh combined tip and root Prandtl correction at agiven radial position 'r_R' (non-dimensioned by rotor radius),
     given a root and tip radius (also non-dimensioned), a tip speed ratio TSR, the number lf blades NBlades and the axial induction factor
     """
-    temp1 = -NBlades/2*(tipradius_R-r_R)/r_R*np.sqrt( 1+ ((TSR*r_R)**2)/((1-axial_induction)**2))
+    #print(-NBlades/2*(tipradius_R-r_R)/r_R*np.sqrt( 1+ ((TSR*r_R)**2)/((1-axial_induction)**2)), (TSR*r_R)**2/((1-axial_induction)**2))
+
+    temp1 = -NBlades/2*(tipradius_R-r_R)/r_R*np.sqrt( 1+ ((TSR*r_R)**2)/((1-axial_induction)**2))#-NBlades/2*(tipradius_R-r_R)/r_R*np.sqrt( 1+ ((TSR*r_R)**2)/((1-axial_induction)**2))
     Ftip = np.array(2/np.pi*np.arccos(np.exp(temp1)))
     Ftip[np.isnan(Ftip)] = 0
     temp1 = NBlades/2*(rootradius_R-r_R)/r_R*np.sqrt( 1+ ((TSR*r_R)**2)/((1-axial_induction)**2))
@@ -74,18 +77,20 @@ def solveStreamtube(Uinf, r1_R, r2_R, rootradius_R, tipradius_R, Omega, Radius, 
     Area = np.pi * ((r2_R * Radius) ** 2 - (r1_R * Radius) ** 2)  # area streamtube
     r_R = (r1_R + r2_R) / 2  # centroide
     # initiatlize variables
-    a = 0.0  # axial induction
-    aline = 0.0  # tangential induction factor
+    a = 0.3  # axial induction
+    aline = 0.  # tangential induction factor
 
-    Niterations = 100
+    Niterations = 4000
     Erroriterations = 0.00001  # error limit for iteration rpocess, in absolute value of induction
 
     for i in range(Niterations):
         # ///////////////////////////////////////////////////////////////////////
         # // this is the block "Calculate velocity and loads at blade element"
         # ///////////////////////////////////////////////////////////////////////
+
         Urotor = Uinf * (1 - a)  # axial velocity at rotor
         Utan = (1 + aline) * Omega * r_R * Radius  # tangential velocity at rotor
+
         # calculate loads in blade segment in 2D (N/m)
         fnorm, ftan, gamma, alpha, inflowangle = loadBladeElement(Urotor, Utan, r_R, chord, twist, polar_alpha, polar_cl, polar_cd)
         load3Daxial = fnorm * Radius * (r2_R - r1_R) * NBlades  # 3D force in axial direction
@@ -103,12 +108,14 @@ def solveStreamtube(Uinf, r1_R, r2_R, rootradius_R, tipradius_R, Omega, Radius, 
 
         # calculate new axial induction, accounting for Glauert's correction
         anew = ainduction(CT)
-
+        anew = min(abs(anew), 0.95)
         # correct new axial induction with Prandtl's correction
         Prandtl, Prandtltip, Prandtlroot = PrandtlTipRootCorrection(r_R, rootradius_R, tipradius_R, Omega * Radius / Uinf, NBlades, anew);
         if (Prandtl < 0.0001):
             Prandtl = 0.0001  # avoid divide by zero
         anew = anew / Prandtl  # correct estimate of axial induction
+        #anew = min(abs(anew), 0.95)
+        #print('~',  anew)
         a = 0.75 * a + 0.25 * anew  # for improving convergence, weigh current and previous iteration of axial induction
 
         # calculate aximuthal induction
@@ -178,7 +185,7 @@ def read_polar(airfoil: str, plot: bool = False):
     return polar_alpha, polar_cl, polar_cd
 
 
-def run_bem(r_R, chord_distribution, twist_distribution, Uinf, TSR, Radius, NBlades, TipLocation_R, RootLocation_R, plot: bool = True,  verbose: bool = True):
+def run_bem(r_R, chord_distribution, twist_distribution, Uinf, TSR, Radius, NBlades, TipLocation_R, RootLocation_R, polar_alpha, polar_cl, polar_cd, plot: bool = True,  verbose: bool = True):
     Omega = Uinf * TSR / Radius
     # solve BEM model
     results = np.zeros([len(r_R) - 1, 8])
@@ -194,12 +201,12 @@ def run_bem(r_R, chord_distribution, twist_distribution, Uinf, TSR, Radius, NBla
     r = np.cumsum(dr)
     CT = np.sum(dr * results[:, 3] * NBlades / (0.5 * Uinf ** 2 * np.pi * Radius ** 2))
     CP = np.sum(dr * results[:, 4] * results[:, 2] * NBlades * Radius * Omega / (0.5 * Uinf ** 3 * np.pi * Radius ** 2))
-    #CQ = np.sum(dr * results[:, 4]*NBlades / (1/2 * Uinf**2 * np.pi * Radius**2))
     CQ = np.sum(dr * results[:, 4] * results[:, 2] * NBlades * Radius / (1 / 2 * Uinf ** 2 * np.pi * Radius ** 3))
+    #CQ = np.sum(dr * results[:, 4]*NBlades / (1/2 * Uinf**2 * np.pi * Radius**2))
 
     print("CT is ", CT)
     print("CP is ", CP)
-    print("CQ is ", CQ)
+    print("CQ is ", CQ, '\n')
 
     if plot:
         fig1 = plt.figure(figsize=(12, 6))
@@ -240,13 +247,51 @@ def run_bem(r_R, chord_distribution, twist_distribution, Uinf, TSR, Radius, NBla
 
 
 
+def run_annuli():
+    delta_r_Rs = np.linspace(0.002, 0.4, 10)
+    r_R_dict = {}
+    for delta_r in delta_r_Rs:
+        r_R_dict[delta_r] = np.arange(0.2, 1 + delta_r / 2, delta_r)
+    #r_R = np.arange(0.2, 1 + delta_r_R / 2, delta_r_R)
+
+    # blade shape
+    pitch = 2  # degrees
+
+    # define flow conditions
+    Uinf = 10  # unperturbed wind speed in m/s
+    TSR = 8  # tip speed ratio
+    Radius = 50
+    NBlades = 3
+
+    TipLocation_R = 1
+    RootLocation_R = 0.2
+
+    # CT, CP, CQ, results = run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=TSR, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, plot = True)
+    # Plot vs TSRs:
+    RESULTS = {}
+    colors = ['k', 'g', 'r']
+    CTS = []
+    for delta_r in delta_r_Rs:
+        r_R = r_R_dict[delta_r]
+        chord_distribution = 3 * (1 - r_R) + 1  # meters
+        twist_distribution = -14 * (1 - r_R) + pitch  # degrees
+        CTi, CPi, CQi, resultsi = run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=TSR, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R,  polar_alpha=polar_alpha, polar_cd=polar_cd, polar_cl=polar_cl, plot=False, verbose=False)
+        #RESULTS[delta_r] = resultsi
+        CTS.append(CTi)
+    print(delta_r_Rs)
+    plt.plot((TipLocation_R-RootLocation_R)/delta_r_Rs, CTS)
+    plt.show()
+
+
 if __name__ == "__main__":
     #plot_induction(a = np.arange(-.5, 1, .01))
     #plot_prandtl_corrections(r_R = np.arange(0.1, 1, .01))
 
 
-
     polar_alpha, polar_cl, polar_cd = read_polar(airfoil = 'DU95W180.txt', plot=False)
+    run_annuli()
+
+
     delta_r_R = .01
     r_R = np.arange(0.2, 1 + delta_r_R / 2, delta_r_R)
 
@@ -257,7 +302,7 @@ if __name__ == "__main__":
 
     # define flow conditions
     Uinf = 10  # unperturbed wind speed in m/s
-    TSR = 8  # tip speed ratio
+    TSR = 6  # tip speed ratio
     Radius = 50
     NBlades = 3
 
@@ -272,13 +317,31 @@ if __name__ == "__main__":
     TSRs = [6, 8, 10]
     colors = ['k', 'g', 'r']
     for t in TSRs:
-        CTi, CPi, CQi, resultsi = run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=t, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, plot=False, verbose=False)
+        CTi, CPi, CQi, resultsi = run_bem(r_R=r_R, chord_distribution=chord_distribution, twist_distribution=twist_distribution, Uinf=Uinf, TSR=t, Radius=Radius, NBlades=NBlades, TipLocation_R=TipLocation_R, RootLocation_R=RootLocation_R, polar_alpha=polar_alpha, polar_cd=polar_cd, polar_cl=polar_cl, plot=False, verbose=False)
         RESULTS[t] = resultsi
 
     fig1 = plt.figure(figsize=(12, 6))
     plt.title('Axial and tangential induction')
     for i, t in enumerate(TSRs):
         plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 0], color=colors[i], linestyle='-', label=f'$a, \lambda={t}$', )
+        plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 1], color=colors[i], linestyle='--', label=f'$a^, \lambda={t}$',)# linewidth=1.2)
+    plt.grid()
+    plt.xlabel('r/R')
+    plt.legend()
+    plt.show()
+
+    plt.title('Axial induction')
+    for i, t in enumerate(TSRs):
+        plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 0], color=colors[i], linestyle='-', label=f'$a, \lambda={t}$', )
+        #plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 1], color=colors[i], linestyle='--', label=f'$a^, \lambda={t}$',)# linewidth=1.2)
+    plt.grid()
+    plt.xlabel('r/R')
+    plt.legend()
+    plt.show()
+
+    plt.title('Tangential induction')
+    for i, t in enumerate(TSRs):
+        #plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 0], color=colors[i], linestyle='-', label=f'$a, \lambda={t}$', )
         plt.plot(RESULTS[t][:, 2], RESULTS[t][:, 1], color=colors[i], linestyle='--', label=f'$a^, \lambda={t}$',)# linewidth=1.2)
     plt.grid()
     plt.xlabel('r/R')

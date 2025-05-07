@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from scipy.optimize import newton_krylov,root, fixed_point
 np.set_printoptions(linewidth=7000)
 
 
@@ -50,7 +51,7 @@ def rotor_blade(r_R):
     return chord, np.radians(twist + pitch)
 
 
-def rotor_wake(N: int, revolutions, geom_func: callable, R, TSR, rotorbounds_r: tuple, nblades: int, fcp=0.75, fbound = 1/4, plot: bool = False):
+def rotor_wake(theta_array, ri_elem_boundaries, N: int, geom_func: callable, R, TSR, nblades: int, fcp=0.75, fbound = 1/4, plot: bool = False):
     '''
     :param N: Number of blade partitions
     :param k2: number of partitions per trailing vortex (i.e. k:=dim(ring_i) = 2*k_2)
@@ -65,8 +66,7 @@ def rotor_wake(N: int, revolutions, geom_func: callable, R, TSR, rotorbounds_r: 
     :param plot: plot system geometry
     :return: xyzi, xyzj, ni
     '''
-    theta_array = np.arange(0, revolutions*2*np.pi, np.pi/10)#np.linspace(0, revolutions*2*np.pi, k2-1)
-    ri_elem_boundaries = cosine_spacing(rotorbounds_r[0]*R, R, N)#[:-1] #np.linspace(rotorbounds_r[0]*R, R, N+1)#
+
     ri = 1 / 2 * (ri_elem_boundaries[:-1] + ri_elem_boundaries[1:])
 
     'reference blade'
@@ -92,10 +92,10 @@ def rotor_wake(N: int, revolutions, geom_func: callable, R, TSR, rotorbounds_r: 
     vortex_segments = np.stack([dxs, dys, dzs], axis=-1)
     xyzj_bound_ref = np.array([
         np.array([
-            [chord_ref[i] * np.sin(-angle_ref[i]), r0, -chord_ref[i] * np.cos(angle_ref[i])],
+            [chord_ref[i] *(1+fbound)* np.sin(-angle_ref[i]), r0, -chord_ref[i]*(1+fbound) * np.cos(angle_ref[i])],
             [chord_ref[i] * fbound* np.sin(-angle_ref[i]), r0, -chord_ref[i] *fbound* np.cos(angle_ref[i])],
             [chord_ref[i+1] * fbound* np.sin(-angle_ref[i+1]), r1, -chord_ref[i+1] *fbound* np.cos(angle_ref[i+1])],
-            [chord_ref[i + 1] * np.sin(-angle_ref[i+1]), r1, -chord_ref[i+1]*np.cos(angle_ref[i+1])],
+            [chord_ref[i + 1]*(1+fbound) * np.sin(-angle_ref[i+1]), r1, -chord_ref[i+1]*(1+fbound)*np.cos(angle_ref[i+1])],
         ]) for i, (r0, r1) in enumerate(zip(ri_elem_boundaries[:-1], ri_elem_boundaries[1:]))
     ])
     xyzj_ref = np.concatenate((np.flip(vortex_segments[:-1,:,:], axis=1)+xyzj_bound_ref[:,[0],:],xyzj_bound_ref, xyzj_bound_ref[:,[-1],:]+vortex_segments[1:,:,:]), axis=1)
@@ -105,7 +105,7 @@ def rotor_wake(N: int, revolutions, geom_func: callable, R, TSR, rotorbounds_r: 
         ax = fig.add_subplot(111, projection='3d')
         blade_plot = xyzi.reshape(nblades, N, 3)
         for bi in range(nblades):
-            ax.plot(blade_plot[bi, :,0],blade_plot[bi, :,1],blade_plot[bi, :,2], color='r',marker='none', zorder=10)
+            ax.plot(blade_plot[bi, :,0],blade_plot[bi, :,1],blade_plot[bi, :,2], color='r',marker='o', zorder=10)
             for i in range(N):
                 ax.plot(xyzj[ bi, i,:, 0], xyzj[bi,i,  :, 1], xyzj[ bi,i, :, 2], color='b', linewidth=.7, alpha=.6)
         plt.gca().set_aspect('equal')
@@ -115,7 +115,7 @@ def rotor_wake(N: int, revolutions, geom_func: callable, R, TSR, rotorbounds_r: 
         plt.title(f'$\lambda={TSR}, N={N}, k_2={theta_array.size}$')
         plt.tight_layout()
         plt.show()
-    return xyzi, xyzj.reshape(nblades * N, xyzj.shape[2], 3), ni
+    return xyzi, xyzj.reshape(nblades * N, xyzj.shape[2], 3), ni, ri_elem_boundaries
 
 
 def assemble_vortex_system(xyzi, xyzj, ni, Qinf, bound_idx = None, CORE = 1e-5, Omegavec = np.zeros(3)):
@@ -230,7 +230,7 @@ def iter_solve_wing(uvws, Qinf, xyzi, niter=200, convweight=0.01, tol=1e-6, plot
         plt.show()
 
 
-def iter_solve_rotor_wake(uvws, Qinf, xyzi, Omega, Radius, polar_alpha, polar_cd, polar_cl, nblades: int, geomfunc: callable, niter=600, convweight=0.01, tol=1e-6, plot: bool = True):
+def iter_solve_rotor_wake(uvws, Qinf, xyzi, Omega, Radius, polar_alpha, polar_cd, polar_cl, nblades: int, geomfunc: callable, convweight0:tuple, niter=600, tol=1e-4, plot: bool = True):
     uvws = np.sum(uvws, axis=2)
     gammas = np.zeros(xyzi.shape[0])
     GAMMAS_new = np.zeros_like(gammas)
@@ -239,7 +239,7 @@ def iter_solve_rotor_wake(uvws, Qinf, xyzi, Omega, Radius, polar_alpha, polar_cd
     eijk = np.zeros((3, 3, 3), dtype=int)
     eijk[0, 1, 2] = eijk[1, 2, 0] = eijk[2, 0, 1] = 1
     eijk[0, 2, 1] = eijk[2, 1, 0] = eijk[1, 0, 2] = -1
-    print(uvws[:,:,0])
+    #print(uvws[:,:,0])
     radial_positions = np.sqrt(np.einsum('ij, ij->i', xyzi, xyzi))
     orthogonals = np.array([-1/radial_positions, np.zeros_like(radial_positions),np.zeros_like(radial_positions)]).T
     vrot = np.einsum('ijk, ...j, ...k', eijk, Omega_vec, xyzi)
@@ -247,6 +247,14 @@ def iter_solve_rotor_wake(uvws, Qinf, xyzi, Omega, Radius, polar_alpha, polar_cd
     chords, twists = geomfunc(radial_positions/Radius)
     temploads = np.zeros(1)
     aline = a = 0
+    error=1
+
+    N = uvws.shape[0]
+    A = uvws.reshape(3 * N, N)
+    U, s, Vh = np.linalg.svd(A)
+    spectral_radius = np.max(np.real(s))
+    OMEGA = .9*2/(spectral_radius)
+    print(spectral_radius, OMEGA)
     for k in range(niter):
         gammas = GAMMAS_new.copy()
         uvw = np.einsum('ijk, j -> ik', uvws, gammas)
@@ -257,8 +265,14 @@ def iter_solve_rotor_wake(uvws, Qinf, xyzi, Omega, Radius, polar_alpha, polar_cd
         GAMMAS_new = temploads[2].copy()
         a = -(uvw[:, 0] + vrot[:, 0] / Qinf[0])
         aline = vazim / (radial_positions * Omega) - 1
+
+        #refererror = np.max(abs(GAMMAS_new))
+        refererror = error  #max(refererror, 0.001)
+        error = np.max(abs(GAMMAS_new - gammas))
+        error = error / refererror
+        convweight = min(OMEGA, convweight0[1])#min(abs(1 - error) * convweight0[0], convweight0[1])
+        print(k, error, refererror, convweight)
         GAMMAS_new = (1 - convweight) * gammas + convweight * GAMMAS_new
-        error = max(abs(GAMMAS_new - gammas))
         if error <= tol:  print(f'Iter. ended at k={k}'); break
     r_R = radial_positions / Radius
     if plot:
@@ -290,7 +304,7 @@ def iter_solve_rotor_wake(uvws, Qinf, xyzi, Omega, Radius, polar_alpha, polar_cd
         axes[2].set_ylabel('$a$')
         fig.tight_layout()
         plt.show()
-    print(gammas)
+    #print(gammas)
     return a, aline, r_R, temploads
 
 
@@ -299,7 +313,7 @@ def loadBladeElement(vnorm, vtan, chord, twist, polar_alpha, polar_cd, polar_cl)
     inflowangle = np.arctan2(vnorm, vtan)
     alpha = twist + inflowangle
     cl = np.interp(alpha, polar_alpha, polar_cl)
-    cd = 0*np.interp(alpha, polar_alpha, polar_cd)
+    cd = np.interp(alpha, polar_alpha, polar_cd)*0
     lift = 0.5 * vmag2 * cl * chord
     drag = 0.5 * vmag2 * cd * chord
     fnorm = lift * np.cos(inflowangle) + drag * np.sin(inflowangle)
@@ -326,18 +340,37 @@ def read_polar(airfoil: str, plot: bool = False):
     return polar_alpha, polar_cl, polar_cd
 
 
+def calculateCT_CProtor_CPflow(Fnorm,Ftan, Uinf, r_Rarray, Omega, Radius, NBlades):
+    r_R_temp = 1/2*(r_Rarray[:-1]+r_Rarray[1:])
+    drtemp = np.diff(r_Rarray)
+    CTrotor = np.sum(drtemp*Fnorm*NBlades/(0.5*Uinf**2*np.pi*Radius))
+    CProtor = np.sum(drtemp*Ftan*r_R_temp*Omega*NBlades/(0.5*Uinf**2*np.pi))
+    return CTrotor, CProtor
+
+
 
 if __name__ == "__main__":
+    N = 11
+    revolutions = 5
     TSR = 6
     R = 50
     nblades = 3
+
+    theta_array = np.arange(0, revolutions * 2 * np.pi, np.pi / 10)  # np.linspace(0, revolutions*2*np.pi, k2-1)
+    ri_elem_boundaries = cosine_spacing(0.2 * R, R, N)  # np.linspace(rotorbounds_r[0]*R, R, N+1)#[:-1] #
+    Qinf = np.array([1, 0, 0])
     polar_alpha, polar_cl, polar_cd = read_polar(airfoil='../DU95W180.txt', plot=False)
-    xyzi, xyzj, ni = rotor_wake(N=30, geom_func=rotor_blade, R=R, TSR=TSR, nblades=nblades, plot=True, fbound=0., fcp=0., rotorbounds_r=(0.2, 1), revolutions=5)
-    Qinf = np.array([1,0,0])
+
+    xyzi, xyzj, ni, ri = rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=rotor_blade, R=R, TSR=TSR, nblades=nblades, plot=True, fbound=0., fcp=0.0,)
     uvws, A, B, br = assemble_vortex_system(xyzi, xyzj, ni, Qinf, CORE=1e-5, Omegavec=np.array([-TSR/R,0,0]))
 
+    a, aline, r_R, temploads = iter_solve_rotor_wake(niter=10000, uvws=uvws, Qinf=Qinf, xyzi=xyzi, Omega=TSR/R, Radius=R, convweight0=(0.1,0.1), geomfunc=rotor_blade, polar_alpha=np.radians(polar_alpha), polar_cd=polar_cd, polar_cl=polar_cl,  nblades=nblades)
+    Faxial = temploads[0].reshape(nblades, int(r_R.size / nblades))
+    Fazim = temploads[1].reshape(nblades, int(r_R.size / nblades))
+    print(f'(CT, CP) = {calculateCT_CProtor_CPflow(Fnorm=np.average(Faxial, axis=0), Ftan=np.average(Fazim, axis=0), Uinf=np.linalg.norm(Qinf), r_Rarray=ri_elem_boundaries / R, Omega=TSR/R, Radius=R, NBlades=nblades)}')
 
-    iter_solve_rotor_wake(niter=600, uvws=uvws, Qinf=Qinf, xyzi=xyzi, Omega=TSR/R, Radius=R, convweight=0.3, geomfunc=rotor_blade, polar_alpha=np.radians(polar_alpha), polar_cd=polar_cd, polar_cl=polar_cl,  nblades=nblades)
+    #iter_solve_rotor_wake_2(niter=5000, uvws=uvws, Qinf=Qinf, xyzi=xyzi, Omega=TSR / R, Radius=R, convweight0=(0.9, .3), geomfunc=rotor_blade, polar_alpha=np.radians(polar_alpha), polar_cd=polar_cd, polar_cl=polar_cl, nblades=nblades)
+
     #print(direct_solve(A, B, br, xyzi, plot=False))
     print('--------------------------------')
 
