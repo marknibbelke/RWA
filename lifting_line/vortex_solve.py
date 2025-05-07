@@ -100,13 +100,20 @@ def rotor_wake(theta_array, ri_elem_boundaries, N: int, geom_func: callable, R, 
     xyzj_ref = np.concatenate((np.flip(vortex_segments[:-1,:,:], axis=1)+xyzj_bound_ref[:,[0],:],xyzj_bound_ref, xyzj_bound_ref[:,[-1],:]+vortex_segments[1:,:,:]), axis=1)
     xyzj = np.einsum('pbj,akj->apbk', xyzj_ref, rot)
     if plot:
-        fig = plt.figure(figsize=(8,7))
+        fig = plt.figure(figsize=(12,7))
         ax = fig.add_subplot(111, projection='3d')
+        ax.set_proj_type('persp', focal_length=0.2)
+        ax.view_init(5, -125,0)
+        ax.grid(False)
+        ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+        ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+        ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
         blade_plot = xyzi.reshape(nblades, N, 3)
         for bi in range(nblades):
-            ax.plot(blade_plot[bi, :,0],blade_plot[bi, :,1],blade_plot[bi, :,2], color='r',marker='o', zorder=10)
+            ax.plot(blade_plot[bi, :,0],blade_plot[bi, :,1],blade_plot[bi, :,2], color='r',marker='none', zorder=10)
             for i in range(N):
-                ax.plot(xyzj[ bi, i,:, 0], xyzj[bi,i,  :, 1], xyzj[ bi,i, :, 2], color='b', linewidth=.7, alpha=.6)
+                ax.plot(xyzj[ bi, i,:, 0], xyzj[bi,i,  :, 1], xyzj[ bi,i, :, 2], color='b', linewidth=.2, )#alpha=.6)
+        plt.xlim([0, 4*R])
         plt.gca().set_aspect('equal')
         plt.xlabel('x')
         plt.ylabel('y')
