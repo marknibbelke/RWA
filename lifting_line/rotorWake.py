@@ -183,7 +183,7 @@ class RotorWakeSim(VortexSim):
         vrot = np.einsum('ijk, ...j, ...k', eijk, Omega_vec, self.xyzi)
         azimdir = np.einsum('ijk, ...j, ...k', eijk, orthogonals, self.xyzi)
 
-        def F(gammas):
+        def _F(gammas):
             uvw = np.einsum('ijk, j -> ik', uvws, gammas)
             vel1s = Qinf[None, :] + uvw + vrot
             vazim = np.einsum('ij,ij->i', azimdir, vel1s)
@@ -192,7 +192,7 @@ class RotorWakeSim(VortexSim):
             gamma_new = temploads[2].copy()
             return gamma_new - gammas
 
-        sol = root(F, gammas0, method=method, tol=tol, options={'maxiter': niter, 'disp': True})
+        sol = root(_F, gammas0, method=method, tol=tol, options={'maxiter': niter, 'disp': True})
         print(sol.message)
         uvw = np.einsum('ijk, j -> ik', uvws, sol.x)
         vel1s = Qinf[None, :] + uvw + vrot
@@ -220,7 +220,6 @@ class RotorWakeSim(VortexSim):
         if plot:
             print(f'\nPlotting results:\nTSR={Omega * self.R}, N={uvws.shape[0]}\n')
             self.plot_results()
-        # print(gammas)
         return self.results
 
     @staticmethod
@@ -379,29 +378,31 @@ def rotor_wake(theta_array, ri_elem_boundaries, N: int, geom_func: callable, R, 
         plt.show()
     return xyzi, xyzj.reshape(nblades * N, xyzj.shape[2], 3), ni, ri_elem_boundaries
 
+def double_rotor_wake():
+    return
 
 
 if __name__ == "__main__":
     'simulation parameters'
-    N = 17
+    N           = 60
     revolutions = 50
-    TSR = 6.0
-    R = 50
-    nblades = 3
-    aw = 0.2
-    Qinf = np.array([1, 0, 0])
+    TSR         = 6.0
+    R           = 50
+    nblades     = 3
+    aw          = 0.2
+    Qinf        = np.array([1, 0, 0])
 
     'generate geometry'
-    s_Array = np.arange(0, np.pi, np.pi / (N + 1))
-    s_Array[-1] = np.pi
-    r_array = -1 * (np.cos(s_Array) - 1) / 2 * 0.8 + 0.2
-    theta_array = np.arange(0, revolutions * 2 * np.pi, np.pi / 10)
-    ri_elem_boundaries = cosine_spacing(0.2 * R, R, N)#r_array * R  #
-    print(1 / 2 * (ri_elem_boundaries[:-1] + ri_elem_boundaries[1:]) / R)
+    s_Array            = np.arange(0, np.pi, np.pi / (N + 1))
+    s_Array[-1]        = np.pi
+    r_array            = -1 * (np.cos(s_Array) - 1) / 2 * 0.8 + 0.2
+    theta_array        = np.arange(0, revolutions * 2 * np.pi, np.pi / 10)
+    ri_elem_boundaries = cosine_spacing(0.2 * R, R, N) # r_array * R #
     xyzi, xyzj, ni, ri = rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=rotor_blade, R=R, TSR=TSR / (1 - aw), nblades=nblades, plot=True, fbound=0., fcp=0., )
+    print(1 / 2 * (ri_elem_boundaries[:-1] + ri_elem_boundaries[1:]) / R)
 
     'simulation'
     ROTORSIM = RotorWakeSim(xyzi=xyzi, xyzj=xyzj, ni=ni, Qinf=Qinf, R=R, geomfunc=rotor_blade, nblades=nblades, elem_boundaries=ri_elem_boundaries)
-    ROTORSIM.iter_solve(Omega=TSR/R, niter=1200, tol=1e-8, plot=True)
-    resLL = ROTORSIM.results
+    ROTORSIM.iter_solve(Omega=TSR/R, niter=1200, tol=1e-8, plot=True, )     #method='excitingmixing')
+    resLL    = ROTORSIM.results
     print(f'(CT, CP) = ({resLL["CT"]:.2f},{resLL["CP"]:.2f})')
