@@ -66,7 +66,6 @@ def rotor_wake(theta_array, ri_elem_boundaries, N: int, geom_func: callable, R, 
     :param plot: plot system geometry
     :return: xyzi, xyzj, ni
     '''
-
     ri = 1 / 2 * (ri_elem_boundaries[:-1] + ri_elem_boundaries[1:])
 
     'reference blade'
@@ -276,7 +275,7 @@ def iter_solve_rotor_wake(uvws, Qinf, xyzi, Omega, Radius, polar_alpha, polar_cd
         if error <= tol:  print(f'Iter. ended at k={k}'); break
     r_R = radial_positions / Radius
     if plot:
-        print(f'\nPlotting results:\nTSR={TSR}, N={uvws.shape[0]}\n')
+        print(f'\nPlotting results:\nTSR={Omega*Radius}, N={uvws.shape[0]}\n')
         r_R = r_R.reshape(nblades, int(r_R.size/nblades))
         GAMMAS_new = GAMMAS_new.reshape(nblades, int(r_R.size/nblades))
         normGamma = np.linalg.norm(Qinf)**2 *np.pi / (nblades*Omega)
@@ -349,19 +348,23 @@ def calculateCT_CProtor_CPflow(Fnorm,Ftan, Uinf, r_Rarray, Omega, Radius, NBlade
 
 
 
+
+
 if __name__ == "__main__":
     N = 11
-    revolutions = 5
-    TSR = 6
+    revolutions = 3.0
+    TSR = 6.0
     R = 50
     nblades = 3
+    aw = 0.2
 
     theta_array = np.arange(0, revolutions * 2 * np.pi, np.pi / 10)  # np.linspace(0, revolutions*2*np.pi, k2-1)
-    ri_elem_boundaries = cosine_spacing(0.2 * R, R, N)  # np.linspace(rotorbounds_r[0]*R, R, N+1)#[:-1] #
+    ri_elem_boundaries = cosine_spacing(0.2 * R, R, N)#[:-1]*1.00705  # np.linspace(rotorbounds_r[0]*R, R, N+1)#[:-1] #
+    print(1/2*(ri_elem_boundaries[:-1]+ri_elem_boundaries[1:])/R)
     Qinf = np.array([1, 0, 0])
     polar_alpha, polar_cl, polar_cd = read_polar(airfoil='../DU95W180.txt', plot=False)
 
-    xyzi, xyzj, ni, ri = rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=rotor_blade, R=R, TSR=TSR, nblades=nblades, plot=True, fbound=0., fcp=0.0,)
+    xyzi, xyzj, ni, ri = rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=rotor_blade, R=R, TSR=TSR/(1-aw), nblades=nblades, plot=True, fbound=0., fcp=0.0,)
     uvws, A, B, br = assemble_vortex_system(xyzi, xyzj, ni, Qinf, CORE=1e-5, Omegavec=np.array([-TSR/R,0,0]))
 
     a, aline, r_R, temploads = iter_solve_rotor_wake(niter=10000, uvws=uvws, Qinf=Qinf, xyzi=xyzi, Omega=TSR/R, Radius=R, convweight0=(0.1,0.1), geomfunc=rotor_blade, polar_alpha=np.radians(polar_alpha), polar_cd=polar_cd, polar_cl=polar_cl,  nblades=nblades)
