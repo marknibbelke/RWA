@@ -91,6 +91,7 @@ class SingleRotorExperiment:
 
     def collect_convergence(self, monitor: bool = False, **kwargs,)->None:
         '''
+        :param monitor: plot progress
         :param kwargs: 'TSR', 'aw', 'N', 'revolutions', 'dtheta', 'spacing', ONLY the sweep arg AND 'N' is of type np.ndarray. First occurrence is the x-axis
         '''
         sweep_keys = [key for key, value in kwargs.items() if isinstance(value, np.ndarray)]
@@ -116,6 +117,7 @@ class SingleRotorExperiment:
 
     def collect_variable(self, monitor: bool = False, **kwargs)->None:
         '''
+        :param monitor: plot progress
         :param kwargs: 'TSR', 'aw', 'N', 'revolutions', 'dtheta', 'spacing', ONLY the sweep arg is of type np.ndarray
         '''
         print(kwargs.keys())
