@@ -86,7 +86,7 @@ class VortexSim(ABC):
         br = np.einsum('ki, ki->k', -Qinf, self.ni)
         return uvws, A, B, br
 
-    def update(self, xyzi_new, xyzj_new, ni_new, Qinf_new)->None:
+    def update(self, xyzi_new, xyzj_new, ni_new, Qinf_new,)->None:
         self.xyzi = xyzi_new
         self.xyzj = xyzj_new
         self.ni = ni_new
@@ -145,6 +145,16 @@ class RotorWakeSim(VortexSim):
         self.chords, self.twists = geomfunc(self.radial_positions / R)
         self.results = {}
 
+    def update(self, xyzi_new, xyzj_new, ni_new, Qinf_new)->None:
+        self.radial_positions = np.sqrt(np.einsum('ij, ij->i', xyzi_new, xyzi_new))
+        self.chords, self.twists = self.geomfunc(self.radial_positions / self.R)
+        self.xyzi = xyzi_new
+        self.xyzj = xyzj_new
+        self.ni = ni_new
+        self.Qinf = Qinf_new
+        self.uvws, self.A, self.B, self.br = self._assemble_vortex_system(Qinf=Qinf_new, )
+
+
     def direct_solve(self, *args, **kwargs):
         pass
 
@@ -180,10 +190,10 @@ class RotorWakeSim(VortexSim):
         fig.tight_layout()
         plt.show()
 
-    def iter_solve(self, Omega, niter=600, tol=1e-6, plot: bool = True, method='broyden1')->dict:
+    def iter_solve(self, Omega, niter=600, tol=1e-6, plot: bool = True, method='broyden1', verbose: bool = True)->dict:
         uvws = np.sum(self.uvws, axis=2)
         Omega_vec = np.array([-Omega, 0, 0])
-        N = xyzi.shape[0]
+        N = self.xyzi.shape[0]
         gammas0 = np.zeros(N)
 
         eijk = np.zeros((3, 3, 3), dtype=int)
@@ -195,24 +205,24 @@ class RotorWakeSim(VortexSim):
 
         def _F(gammas):
             uvw = np.einsum('ijk, j -> ik', uvws, gammas)
-            vel1s = Qinf[None, :] + uvw + vrot
+            vel1s = self.Qinf[None, :] + uvw + vrot
             vazim = np.einsum('ij,ij->i', azimdir, vel1s)
             vaxial = vel1s[:, 0]
             temploads = self._loadBladeElement(vaxial, vazim,)
             gamma_new = temploads[2].copy()
             return gamma_new - gammas
 
-        sol = root(_F, gammas0, method=method, tol=tol, options={'maxiter': niter, 'disp': True})
+        sol = root(_F, gammas0, method=method, tol=tol, options={'maxiter': niter, 'disp': verbose})
         print(sol.message)
         uvw = np.einsum('ijk,j->ik', uvws, sol.x)
-        vel1s = Qinf[None, :] + uvw + vrot
+        vel1s = self.Qinf[None, :] + uvw + vrot
         vazim = np.einsum('ij,ij->i', azimdir, vel1s)
         vaxial = vel1s[:, 0]
         temploads =  self._loadBladeElement(vaxial, vazim,)
         r_R = self.radial_positions / self.R
-        r_R = r_R.reshape(nblades, int(r_R.size / self.nblades))
+        r_R = r_R.reshape(self.nblades, int(r_R.size / self.nblades))
         aline = (vazim / (self.radial_positions * Omega) - 1).reshape(self.nblades, int(r_R.size / self.nblades))
-        a = -(uvw[:, 0] + vrot[:, 0] / Qinf[0]).reshape(self.nblades, int(r_R.size / self.nblades))
+        a = -(uvw[:, 0] + vrot[:, 0] / self.Qinf[0]).reshape(self.nblades, int(r_R.size / self.nblades))
         GAMMAS_new = sol.x.reshape(self.nblades, int(r_R.size / self.nblades))
         normGamma = np.linalg.norm(self.Qinf) ** 2 * np.pi / (self.nblades * Omega)
         Faxial = temploads[0].reshape(self.nblades, int(r_R.size / self.nblades))
