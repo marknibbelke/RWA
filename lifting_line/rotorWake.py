@@ -2,7 +2,7 @@ import  numpy                as np
 import  matplotlib.pyplot    as plt
 import  pandas               as pd
 from    abc                  import ABC, abstractmethod
-from    scipy.optimize       import newton_krylov,root
+from    scipy.optimize       import newton_krylov, root
 np.set_printoptions(linewidth=7000)
 
 
@@ -148,26 +148,35 @@ class RotorWakeSim(VortexSim):
     def direct_solve(self, *args, **kwargs):
         pass
 
-    def plot_results(self)->None:
-        fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(7, 8))
-        axes[0].plot(self.results['r_R'], self.results['Gamma'], marker='o', label='$\Gamma$')
-        axes[0].grid()
-        axes[0].set_ylim(bottom=0)
-        axes[0].set_ylabel('$\\tilde{\Gamma}$')
-        axes[0].legend()
-        axes[1].plot(self.results['r_R'], self.results['Faxial'], marker='o', label='$F_{axial}$')
-        axes[1].plot(self.results['r_R'], self.results['Fazim'], marker='o', label='$F_{azim}$')
-        axes[1].set_ylim(bottom=0)
-        axes[1].set_ylabel('$\\tilde{F}$')
-        axes[1].grid()
-        axes[1].legend()
-        axes[2].plot(self.results['r_R'], self.results['a'], marker='o', label='$a$')
-        axes[2].plot(self.results['r_R'], self.results['aline'], marker='o', label='$a^{,}$')
-        axes[2].set_ylim(bottom=0)
-        axes[2].grid()
-        axes[2].legend()
-        axes[2].set_xlabel('$r/R$')
-        axes[2].set_ylabel('$a$')
+    def plot_results(self, lw = 0.75, c='k')->None:
+        TSR = self.results['TSR']
+        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(14, 7))
+        axes[0,0].plot(self.results['r_R'], self.results['Gamma'], marker='o', color=c,label='$\\tilde{\Gamma}$: '+f'TSR={TSR}', linewidth=lw)
+        axes[0,0].grid()
+        axes[0,0].set_ylim(bottom=0)
+        axes[0,0].set_ylabel('$\\tilde{\Gamma}$')
+        axes[0,0].legend()
+        axes[0,1].plot(self.results['r_R'], self.results['Faxial'], marker='o', color=c, label='$\\tilde{F}_{axial}$: '+f'TSR={TSR}', linewidth=lw)
+        axes[0,1].plot(self.results['r_R'], self.results['Fazim'], linestyle='--', marker='s',color=c, label='$\\tilde{F}_{azim}$: '+f'TSR={TSR}', linewidth=lw)
+        axes[0,1].set_ylim(bottom=0)
+        axes[0,1].set_ylabel('$\\tilde{F}$')
+        axes[0,1].grid()
+        axes[0,1].legend()
+        axes[1,0].plot(self.results['r_R'], self.results['a'], marker='o', color=c,label='$a$: '+f'TSR={TSR}', linewidth=lw)
+        axes[1,0].plot(self.results['r_R'], self.results['aline'], marker='s', linestyle='--', color=c,label='$a^{,}$: '+f'TSR={TSR}', linewidth=lw)
+        axes[1,0].set_ylim(bottom=0)
+        axes[1,0].grid()
+        axes[1,0].legend()
+        axes[1,0].set_ylabel('$a$')
+        axes[1,1].set_xlabel('$r/R$')
+        axes[1,1].plot(self.results['r_R'], self.results['alpha'], marker='o', color=c,label='$\\alpha$: '+f'TSR={TSR}', linewidth=lw)
+        axes[1,1].plot(self.results['r_R'], self.results['inflow'], marker='o',linestyle='--', color=c, label='$\phi$: ' + f'TSR={TSR}', linewidth=lw)
+        axes[1,1].grid()
+        axes[1,1].set_ylim(bottom=0)
+        axes[1,1].set_ylabel('$\\alpha, \phi$')
+        axes[1,1].legend()
+        axes[1,1].set_xlabel('$r/R$')
+        fig.suptitle(f'$N={self.results["N"]}, n_b={self.nblades}, k={self.xyzj.shape[1]}$')
         fig.tight_layout()
         plt.show()
 
@@ -176,6 +185,7 @@ class RotorWakeSim(VortexSim):
         Omega_vec = np.array([-Omega, 0, 0])
         N = xyzi.shape[0]
         gammas0 = np.zeros(N)
+
         eijk = np.zeros((3, 3, 3), dtype=int)
         eijk[0, 1, 2] = eijk[1, 2, 0] = eijk[2, 0, 1] = 1
         eijk[0, 2, 1] = eijk[2, 1, 0] = eijk[1, 0, 2] = -1
@@ -194,7 +204,7 @@ class RotorWakeSim(VortexSim):
 
         sol = root(_F, gammas0, method=method, tol=tol, options={'maxiter': niter, 'disp': True})
         print(sol.message)
-        uvw = np.einsum('ijk, j -> ik', uvws, sol.x)
+        uvw = np.einsum('ijk,j->ik', uvws, sol.x)
         vel1s = Qinf[None, :] + uvw + vrot
         vazim = np.einsum('ij,ij->i', azimdir, vel1s)
         vaxial = vel1s[:, 0]
@@ -216,6 +226,9 @@ class RotorWakeSim(VortexSim):
         self.results['aline'] = np.average(aline, axis=0)
         self.results['Omega'] = Omega
         self.results['TSR'] = Omega * self.R
+        self.results['alpha'] = np.average(temploads[3].reshape(r_R.shape), axis=0)
+        self.results['inflow'] = np.average(temploads[4].reshape(r_R.shape), axis=0)
+        self.results['N'] = N
         self._calculateCT_CProtor_CPflow(np.average(Faxial, axis=0), np.average(Fazim, axis=0))
         if plot:
             print(f'\nPlotting results:\nTSR={Omega * self.R}, N={uvws.shape[0]}\n')
@@ -239,6 +252,7 @@ class RotorWakeSim(VortexSim):
             axs[1].grid()
             plt.show()
         return np.radians(polar_alpha), polar_cl, polar_cd
+
 
     def _loadBladeElement(self, vnorm, vtan, ):
         vmag2 = vnorm ** 2 + vtan ** 2
@@ -384,7 +398,7 @@ def double_rotor_wake():
 
 if __name__ == "__main__":
     'simulation parameters'
-    N           = 60
+    N           = 25
     revolutions = 50
     TSR         = 6.0
     R           = 50
@@ -397,7 +411,7 @@ if __name__ == "__main__":
     s_Array[-1]        = np.pi
     r_array            = -1 * (np.cos(s_Array) - 1) / 2 * 0.8 + 0.2
     theta_array        = np.arange(0, revolutions * 2 * np.pi, np.pi / 10)
-    ri_elem_boundaries = cosine_spacing(0.2 * R, R, N) # r_array * R #
+    ri_elem_boundaries = cosine_spacing(0.2 * R, R, N) #r_array * R #
     xyzi, xyzj, ni, ri = rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=rotor_blade, R=R, TSR=TSR / (1 - aw), nblades=nblades, plot=True, fbound=0., fcp=0., )
     print(1 / 2 * (ri_elem_boundaries[:-1] + ri_elem_boundaries[1:]) / R)
 
