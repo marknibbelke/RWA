@@ -39,16 +39,23 @@ class SingleRotorExperiment:
         fig2, ax2 = plt.subplots(nrows=1, ncols=1, figsize=(7, 6))
         errors = [[abs(CTs[i][j] - CTs[i][-1])/CTs[i][-1] for j in range(len(CTs[0])-1)] for i in range(len(keyvalss[1]))]
         for i in range(len(keyvalss[1])):
-            ax1.plot(keyvalss[0], CTs[i], lw=lw, color=c, linestyle=ls[i], marker=ms[i], label=f'{keys[1]}: '+f'{keyvalss[1][i]}')
-            ax2.loglog(keyvalss[0][:-1], errors[i], lw=lw, color=c, linestyle=ls[i], marker=ms[i], label=f'{keys[1]}: '+f'{keyvalss[1][i]}')
+            kv1 = (f'={keyvalss[1][i]:.2f}' if isinstance(keyvalss[1][i], float) else f'={keyvalss[1][i]}')
+            ax1.plot(keyvalss[0], CTs[i], lw=lw, color=c, linestyle=ls[i], marker=ms[i], label=f'{keys[1]}: '+f'{kv1}')
+            ax2.loglog(keyvalss[0][:-1], errors[i], lw=lw, color=c, linestyle=ls[i], marker=ms[i], label=f'{keys[1]}: '+f'{kv1}')
         ax1.grid()
         ax1.legend(fontsize=fs)
-        ax1.set_xlabel('$N$')
+        ax1.set_xlabel(keys[0])
         ax1.set_ylabel('$C_T$')
         ax2.grid()
         ax2.legend(fontsize=fs)
-        ax2.set_xlabel('$N$')
+        ax2.set_xlabel(keys[0])
         ax2.set_ylabel('$-$')
+        fixed_vars = self.compiled_results.get('fixed_vars', {})
+        title_str = ', '.join(f'{k}={v:.2f}' if isinstance(v, float) else f'{k}={v}' for k, v in fixed_vars.items())
+        ax1.set_title(title_str + f', $n_b$={self.nblades}')
+        ax2.set_title(title_str + f', $n_b$={self.nblades}')
+        fig1.tight_layout()
+        fig2.tight_layout()
         plt.show()
 
     def plot_compiled_results(self, lw=0.75, fs=8)->None:
@@ -56,9 +63,8 @@ class SingleRotorExperiment:
         fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(14, 7))
         key = self.compiled_results['key']
         keyvals = self.compiled_results['key_vals']
-        results=None
         for i, keyval in enumerate(keyvals):
-            kv = keyvals[i]
+            kv = (f'={keyvals[i]:.2f}' if isinstance(keyvals[i], float) else f'={keyvals[i]}')
             results = self.compiled_results['results'][keyval]
             axes[0,0].plot(results['r_R'], results['Gamma'], marker='o', color=colors[i],label='$\\tilde{\Gamma}$: '+key+f'={kv}', linewidth=lw)
             axes[0,1].plot(results['r_R'], results['Faxial'], marker='o', color=colors[i], label='$\\tilde{F}_{axial}$: '+key+f'={kv}', linewidth=lw)
@@ -85,7 +91,9 @@ class SingleRotorExperiment:
         axes[1, 1].set_ylabel('$\\alpha, \phi$')
         axes[1, 1].legend(fontsize=fs)
         axes[1, 1].set_xlabel('$r/R$')
-        fig.suptitle(f'$N={results["N"]}, n_b={self.nblades}, k={self.ROTORSIM.xyzj.shape[1]}$')
+        fixed_vars = self.compiled_results.get('fixed_vars', {})
+        title_str = ', '.join(f'{k}={v:.2f}' if isinstance(v, float) else f'{k}={v}' for k, v in fixed_vars.items())
+        fig.suptitle(title_str+f', $n_b$={self.nblades}')
         fig.tight_layout()
         plt.show()
 
@@ -100,6 +108,7 @@ class SingleRotorExperiment:
         self.compiled_results['key'] = sweep_keys
         self.compiled_results['key_vals'] = [kwargs[sweep_keys[i]] for i in range(len(sweep_keys))]
         self.compiled_results['results'] = {}
+        self.compiled_results['fixed_vars'] = {k: v for k, v in kwargs.items() if k not in sweep_keys}
         print(100 * '-' + f'\nSWEEP KEYS: {sweep_keys}\n' + 100 * '-')
         for sweep_val_1 in kwargs[sweep_keys[0]]:
             for sweep_val_2 in kwargs[sweep_keys[1]]:
@@ -126,6 +135,7 @@ class SingleRotorExperiment:
         self.compiled_results['key'] = sweep_key
         self.compiled_results['key_vals'] = kwargs[sweep_key]
         self.compiled_results['results'] = {}
+        self.compiled_results['fixed_vars'] = {k: v for k, v in kwargs.items() if k != sweep_key}
         print(100*'-'+f'\nSWEEP KEY: {sweep_key}\n'+100*'-')
         for sweep_val in kwargs[sweep_key]:
             loop_args = kwargs.copy()
@@ -143,6 +153,9 @@ class SingleRotorExperiment:
 if __name__ == '__main__':
     Qinf = np.array([1,0,0])
     E = SingleRotorExperiment(R=50, nblades=3, Qinf=Qinf)
+    #E.collect_variable(TSR=6, aw=0.2, N=11, revolutions=50, dtheta=np.linspace(np.pi/50,np.pi/2, 3), spacing='cosine')
     E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=11, revolutions=50, dtheta=np.pi/10, spacing='cosine')
+    #E.collect_variable(TSR=6, aw=np.array([.05, .35, .65]), N=11, revolutions=50, dtheta=np.pi / 10, spacing='cosine')
     #E.collect_convergence(TSR=6, aw=0.2, N=np.array([2**k for k in range(1, 6)]), revolutions=50, dtheta=np.pi/10, spacing=np.array(['linear', 'cosine']))
+    #E.collect_convergence(TSR=6, aw=0.2, N=np.array([2**k for k in range(1, 4)]), revolutions=50, dtheta=np.linspace(np.pi/2, np.pi/4, 2), spacing='cosine')
 
