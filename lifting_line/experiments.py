@@ -118,8 +118,7 @@ class SingleRotorExperiment:
                 ri_elem_boundaries = self.method_dict[loop_args['spacing']](self.blade_bounds[0] * self.R, self.R, loop_args['N'])
                 theta_array = np.arange(0, loop_args['revolutions'] * 2 * np.pi, loop_args['dtheta'])
                 xyzi, xyzj, ni, ri = self.geomfunc(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=loop_args['N'], geom_func=self.bladefunc, R=self.R, TSR=loop_args['TSR'] / (1 - loop_args['aw']), nblades=self.nblades, plot=monitor, fbound=0., fcp=0., )
-                self.ROTORSIM.update(xyzi_new=xyzi, xyzj_new=xyzj, ni_new=ni, Qinf_new=self.Qinf)
-                self.ROTORSIM.elem_bounds = ri_elem_boundaries
+                self.ROTORSIM.update(xyzi_new=xyzi, xyzj_new=xyzj, ni_new=ni, Qinf_new=self.Qinf, elem_bounds_new=ri_elem_boundaries)
                 self.ROTORSIM.iter_solve(Omega=loop_args['TSR'] / self.R, niter=1200, tol=1e-8, plot=monitor, verbose=False)
                 self.compiled_results['results'][(sweep_val_1, sweep_val_2)] = self.ROTORSIM.results.copy()
         self.plot_compiled_convergence()
@@ -143,8 +142,7 @@ class SingleRotorExperiment:
             ri_elem_boundaries = self.method_dict[loop_args['spacing']](self.blade_bounds[0] * self.R, self.R, loop_args['N'])
             theta_array = np.arange(0, loop_args['revolutions'] * 2 * np.pi, loop_args['dtheta'])
             xyzi, xyzj, ni, ri = self.geomfunc(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=loop_args['N'], geom_func=self.bladefunc, R=self.R, TSR=loop_args['TSR'] / (1 - loop_args['aw']), nblades=self.nblades, plot=monitor, fbound=0., fcp=0., )
-            self.ROTORSIM.update(xyzi_new=xyzi, xyzj_new=xyzj, ni_new=ni, Qinf_new=self.Qinf)
-            self.ROTORSIM.elem_bounds = ri_elem_boundaries
+            self.ROTORSIM.update(xyzi_new=xyzi, xyzj_new=xyzj, ni_new=ni, Qinf_new=self.Qinf, elem_bounds_new=ri_elem_boundaries)
             self.ROTORSIM.iter_solve(Omega=loop_args['TSR']/self.R, niter=1200, tol=1e-8, plot=monitor, verbose=False)
             self.compiled_results['results'][sweep_val] = self.ROTORSIM.results.copy()
         self.plot_compiled_results()

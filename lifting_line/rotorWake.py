@@ -86,13 +86,16 @@ class VortexSim(ABC):
         br = np.einsum('ki, ki->k', -Qinf, self.ni)
         return uvws, A, B, br
 
-    def update(self, xyzi_new, xyzj_new, ni_new, Qinf_new,)->None:
+    def update(self, xyzi_new, xyzj_new, ni_new, Qinf_new, *args, **kwargs)->None:
         self.xyzi = xyzi_new
         self.xyzj = xyzj_new
         self.ni = ni_new
         self.Qinf = Qinf_new
         self.uvws, self.A, self.B, self.br = self._assemble_vortex_system(Qinf=Qinf_new, )
+        self._post_update_hook(*args, **kwargs)
 
+    def _post_update_hook(self, *args, **kwargs):
+        pass
 
 
 class WingSim(VortexSim):
@@ -145,15 +148,12 @@ class RotorWakeSim(VortexSim):
         self.chords, self.twists = geomfunc(self.radial_positions / R)
         self.results = {}
 
-    def update(self, xyzi_new, xyzj_new, ni_new, Qinf_new)->None:
-        self.radial_positions = np.sqrt(np.einsum('ij, ij->i', xyzi_new, xyzi_new))
+    def _post_update_hook(self, *args, **kwargs):
+        self.radial_positions = np.sqrt(np.einsum('ij, ij->i', self.xyzi, self.xyzi))
         self.chords, self.twists = self.geomfunc(self.radial_positions / self.R)
-        self.xyzi = xyzi_new
-        self.xyzj = xyzj_new
-        self.ni = ni_new
-        self.Qinf = Qinf_new
-        self.uvws, self.A, self.B, self.br = self._assemble_vortex_system(Qinf=Qinf_new, )
-
+        elem_bounds_new = kwargs.get("elem_bounds_new", None)
+        if elem_bounds_new is not None:
+            self.elem_bounds = elem_bounds_new
 
     def direct_solve(self, *args, **kwargs):
         pass
