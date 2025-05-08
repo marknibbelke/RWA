@@ -10,6 +10,7 @@ class SingleRotorExperiment:
         self.Qinf = Qinf
         self.bladefunc = bladefunc
         self.blade_bounds = blade_bounds
+        self.method_dict = {'cosine': self.cosine_spacing, 'linear': self.linear_spacing}
 
         self.geomfunc = rw.rotor_wake
         self.ROTORSIM = rw.RotorWakeSim(np.zeros((5, 3)), np.zeros((5,4,3)), np.zeros((5, 3)), np.zeros(6), Qinf, R, bladefunc, nblades)
@@ -88,39 +89,6 @@ class SingleRotorExperiment:
         fig.tight_layout()
         plt.show()
 
-    def collect_variable_TSR(self, TSRsweep: np.array, aw=0.2, N: int=11, revolutions=50, dtheta=np.pi/10, spacing:str='cosine', ):
-        theta_array = np.arange(0, revolutions * 2 * np.pi, dtheta)
-        ri_elem_boundaries = self.cosine_spacing(self.blade_bounds[0] * self.R, self.R, N)
-        self.compiled_results = {}
-        self.compiled_results['key'] = 'TSR'
-        self.compiled_results['key_vals'] = TSRsweep
-        self.compiled_results['results'] = {}
-        for TSR in TSRsweep:
-            xyzi, xyzj, ni, ri = self.geomfunc(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=self.bladefunc, R=self.R, TSR=TSR / (1 - aw), nblades=self.nblades, plot=False, fbound=0., fcp=0., )
-            self.ROTORSIM.update(xyzi_new=xyzi, xyzj_new=xyzj, ni_new=ni, Qinf_new=self.Qinf)
-            self.ROTORSIM.elem_bounds = ri_elem_boundaries
-            self.ROTORSIM.iter_solve(Omega=TSR/self.R, niter=1200, tol=1e-8, plot=False, verbose=False)
-            self.compiled_results['results'][TSR] = self.ROTORSIM.results.copy()
-        self.plot_compiled_results()
-
-    def collect_variable_N(self, Nsweep: np.array, TSR = 6, aw=0.2, revolutions=50, dtheta=np.pi/10, monitor: bool = False):
-        theta_array = np.arange(0, revolutions * 2 * np.pi, dtheta)
-        self.compiled_results = {}
-        self.compiled_results['key'] = ['N', 'spacing']
-        self.compiled_results['key_vals'] = [Nsweep, ['cosine', 'linear']]
-        self.compiled_results['results'] = {}
-        methods = [self.cosine_spacing, self.linear_spacing]
-        for N in Nsweep:
-            print(f'-------\nN={N}\n-------')
-            for i, method in enumerate(methods):
-                ri_elem_boundaries = method(self.blade_bounds[0] * self.R, self.R, N)
-                xyzi, xyzj, ni, ri = self.geomfunc(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=self.bladefunc, R=self.R, TSR=TSR / (1 - aw), nblades=self.nblades, plot=monitor, fbound=0., fcp=0., )
-                self.ROTORSIM.update(xyzi_new=xyzi, xyzj_new=xyzj, ni_new=ni, Qinf_new=self.Qinf)
-                self.ROTORSIM.elem_bounds = ri_elem_boundaries
-                self.ROTORSIM.iter_solve(Omega=TSR / self.R, niter=1200, tol=1e-8, plot=monitor, verbose=False)
-                self.compiled_results['results'][(N, self.compiled_results['key_vals'][1][i])] = self.ROTORSIM.results.copy()
-        self.plot_compiled_convergence()
-
     def collect_convergence(self, monitor: bool = False, **kwargs,)->None:
         '''
         :param kwargs: 'TSR', 'aw', 'N', 'revolutions', 'dtheta', 'spacing', ONLY the sweep arg AND 'N' is of type np.ndarray. First occurrence is the x-axis
@@ -131,14 +99,13 @@ class SingleRotorExperiment:
         self.compiled_results['key'] = sweep_keys
         self.compiled_results['key_vals'] = [kwargs[sweep_keys[i]] for i in range(len(sweep_keys))]
         self.compiled_results['results'] = {}
-        method_dict = {'cosine': self.cosine_spacing, 'linear': self.linear_spacing}
         print(100 * '-' + f'\nSWEEP KEYS: {sweep_keys}\n' + 100 * '-')
         for sweep_val_1 in kwargs[sweep_keys[0]]:
             for sweep_val_2 in kwargs[sweep_keys[1]]:
                 loop_args = kwargs.copy()
                 loop_args[sweep_keys[0]] = sweep_val_1
                 loop_args[sweep_keys[1]] = sweep_val_2
-                ri_elem_boundaries = method_dict[loop_args['spacing']](self.blade_bounds[0] * self.R, self.R, loop_args['N'])
+                ri_elem_boundaries = self.method_dict[loop_args['spacing']](self.blade_bounds[0] * self.R, self.R, loop_args['N'])
                 theta_array = np.arange(0, loop_args['revolutions'] * 2 * np.pi, loop_args['dtheta'])
                 xyzi, xyzj, ni, ri = self.geomfunc(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=loop_args['N'], geom_func=self.bladefunc, R=self.R, TSR=loop_args['TSR'] / (1 - loop_args['aw']), nblades=self.nblades, plot=monitor, fbound=0., fcp=0., )
                 self.ROTORSIM.update(xyzi_new=xyzi, xyzj_new=xyzj, ni_new=ni, Qinf_new=self.Qinf)
@@ -157,12 +124,11 @@ class SingleRotorExperiment:
         self.compiled_results['key'] = sweep_key
         self.compiled_results['key_vals'] = kwargs[sweep_key]
         self.compiled_results['results'] = {}
-        method_dict = {'cosine': self.cosine_spacing, 'linear': self.linear_spacing}
         print(100*'-'+f'\nSWEEP KEY: {sweep_key}\n'+100*'-')
         for sweep_val in kwargs[sweep_key]:
             loop_args = kwargs.copy()
             loop_args[sweep_key] = sweep_val
-            ri_elem_boundaries = method_dict[loop_args['spacing']](self.blade_bounds[0] * self.R, self.R, loop_args['N'])
+            ri_elem_boundaries = self.method_dict[loop_args['spacing']](self.blade_bounds[0] * self.R, self.R, loop_args['N'])
             theta_array = np.arange(0, loop_args['revolutions'] * 2 * np.pi, loop_args['dtheta'])
             xyzi, xyzj, ni, ri = self.geomfunc(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=loop_args['N'], geom_func=self.bladefunc, R=self.R, TSR=loop_args['TSR'] / (1 - loop_args['aw']), nblades=self.nblades, plot=monitor, fbound=0., fcp=0., )
             self.ROTORSIM.update(xyzi_new=xyzi, xyzj_new=xyzj, ni_new=ni, Qinf_new=self.Qinf)
@@ -175,6 +141,6 @@ class SingleRotorExperiment:
 if __name__ == '__main__':
     Qinf = np.array([1,0,0])
     E = SingleRotorExperiment(R=50, nblades=3, Qinf=Qinf)
-    #E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=11, revolutions=50, dtheta=np.pi/10, spacing='cosine')
+    E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=11, revolutions=50, dtheta=np.pi/10, spacing='cosine')
     #E.collect_convergence(TSR=6, aw=0.2, N=np.array([2**k for k in range(1, 6)]), revolutions=50, dtheta=np.pi/10, spacing=np.array(['linear', 'cosine']))
 
