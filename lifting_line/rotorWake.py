@@ -84,6 +84,7 @@ class VortexSim(ABC):
         vrot = np.einsum('ijk, ...j, ...k', eijk, Omegavec, self.xyzi)
         Qinf = Qinf[None, :] + vrot
         br = np.einsum('ki, ki->k', -Qinf, self.ni)
+
         return uvws, A, B, br
 
     def update(self, xyzi_new, xyzj_new, ni_new, Qinf_new, *args, **kwargs)->None:
@@ -263,7 +264,6 @@ class RotorWakeSim(VortexSim):
             plt.show()
         return np.radians(polar_alpha), polar_cl, polar_cd
 
-
     def _loadBladeElement(self, vnorm, vtan, ):
         vmag2 = vnorm ** 2 + vtan ** 2
         inflowangle = np.arctan2(vnorm, vtan)
@@ -408,7 +408,7 @@ def double_rotor_wake():
 
 if __name__ == "__main__":
     'simulation parameters'
-    N           = 25
+    N           = 11
     revolutions = 50
     TSR         = 6.0
     R           = 50
