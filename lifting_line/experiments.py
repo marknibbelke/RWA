@@ -152,9 +152,9 @@ if __name__ == '__main__':
     Qinf = np.array([1,0,0])
     E = SingleRotorExperiment(R=50, nblades=3, Qinf=Qinf)
     #E.collect_variable(TSR=6, aw=0.2, N=11, revolutions=50, dtheta=np.linspace(np.pi/50,np.pi/2, 3), spacing='cosine')
-    #E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=25, revolutions=50, dtheta=np.pi/10, spacing='cosine')
+    E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=25, revolutions=50, dtheta=np.pi/10, spacing='cosine')
     #E.collect_variable(TSR=6, aw=np.array([.05, .35, .65]), N=11, revolutions=50, dtheta=np.pi / 10, spacing='cosine')
-    E.collect_variable(TSR=6, aw=0.2, N=25, revolutions=np.array([.5, 5, 50]), dtheta=np.pi/10, spacing='cosine')
+    #E.collect_variable(TSR=6, aw=0.2, N=25, revolutions=np.array([.5, 5, 50]), dtheta=np.pi/10, spacing='cosine')
     #E.collect_convergence(TSR=6, aw=0.2, N=np.linspace(1, 40, 7, dtype=int), revolutions=50, dtheta=np.pi/10, spacing=np.array(['linear', 'cosine']))
     #E.collect_convergence(TSR=6, aw=0.2, N=np.array([2**k for k in range(1, 4)]), revolutions=50, dtheta=np.linspace(np.pi/2, np.pi/4, 2), spacing='cosine')
 
