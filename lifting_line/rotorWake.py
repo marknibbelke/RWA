@@ -59,7 +59,7 @@ class VortexSim(ABC):
         r1s = self.xyzi[:, None, None, :] - self.xyzj[None, :, :-1, :]
         r2s = self.xyzi[:, None, None, :] - self.xyzj[None, :, 1:, :]
         r0s = self.xyzj[:, 1:, :] - self.xyzj[:, :-1, :]
-
+        print(r1s.shape, r0s.shape)
         'd'
         norm_r1s = np.linalg.norm(r1s, axis=3, keepdims=True)
         norm_r2s = np.linalg.norm(r2s, axis=3, keepdims=True)

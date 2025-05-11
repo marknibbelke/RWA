@@ -148,11 +148,23 @@ class SingleRotorExperiment:
         self.plot_compiled_results()
 
 
+class DualRotorExperiment:
+    def __init__(self, xyzis: tuple, xyzjs: tuple, nis: tuple, Qinf, Rs, elemboundss, geomfunc:callable=rw.rotor_blade, nbladess=3, ):
+        self.xyzi_1, self.xyzi_2 = xyzis
+        self.xyzj_1, self.xyzj_2 = xyzjs
+        self.ni_1, self.ni_2 = nis
+        self.Qinf = Qinf
+        self.R1, self.R2 = Rs
+        self.elembounds_1, self.elembounds_2 = elemboundss
+        self.geomfunc = geomfunc
+        self.nblades_1, self.nblades_2 = nbladess
+
+
 if __name__ == '__main__':
     Qinf = np.array([1,0,0])
     E = SingleRotorExperiment(R=50, nblades=3, Qinf=Qinf)
     #E.collect_variable(TSR=6, aw=0.2, N=11, revolutions=50, dtheta=np.linspace(np.pi/50,np.pi/2, 3), spacing='cosine')
-    E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=25, revolutions=50, dtheta=np.pi/10, spacing='cosine')
+    #E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=50, revolutions=15, dtheta=np.pi/10, spacing='cosine', monitor=False)
     #E.collect_variable(TSR=6, aw=np.array([.05, .35, .65]), N=11, revolutions=50, dtheta=np.pi / 10, spacing='cosine')
     #E.collect_variable(TSR=6, aw=0.2, N=25, revolutions=np.array([.5, 5, 50]), dtheta=np.pi/10, spacing='cosine')
     #E.collect_convergence(TSR=6, aw=0.2, N=np.linspace(1, 40, 7, dtype=int), revolutions=50, dtheta=np.pi/10, spacing=np.array(['linear', 'cosine']))
