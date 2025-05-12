@@ -10,12 +10,12 @@ import pandas               as pd
 @dataclass
 class Rotor:
     R: float
-    N: int
-    dtheta: float
-    TSR: float
     geomfunc: callable
     nblades: int
     blade_bounds: tuple
+    N: int = None
+    dtheta: float = None
+    TSR: float = None
     direction: int = +1
     results: dict = field(default_factory=dict)
     elem_boundaries: np.ndarray = None
@@ -428,7 +428,7 @@ if __name__ == '__main__':
     DR.simulate(delta_phi_0s=(0, np.radians(30)), delta_Ls=(0, 200))
 
 
-    #ROTOR = Rotor(R=50, dtheta=np.pi/10, N=8, TSR=10, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=+1)
+    ROTOR = Rotor(R=50, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=+1)
     #E = SingleRotorExperiment(ROTOR=ROTOR, Qinf=Qinf)
     #E = SingleRotorExperiment(R=50, nblades=3, Qinf=Qinf)
     #E.collect_variable(TSR=6, aw=0.2, N=11, revolutions=50, dtheta=np.linspace(np.pi/50,np.pi/2, 3), spacing='cosine')
