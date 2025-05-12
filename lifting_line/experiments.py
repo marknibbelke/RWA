@@ -244,6 +244,8 @@ class MultiWakeSim(rw.VortexSim):
         Faxials = [temploads[0][rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
         Fazims = [temploads[1][rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
         normFaxs = [.5 * np.linalg.norm(self.Qinf) ** 2 * ROTOR.R for i, ROTOR in enumerate(ROTORs)]
+        alphas = [temploads[3][rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
+        inflows = [temploads[4][rotor_ids == i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
         for i, ROTOR in enumerate(ROTORs):
             ROTOR.results = {
                 'r_R': r_Rs[i],
@@ -255,7 +257,9 @@ class MultiWakeSim(rw.VortexSim):
                 'norm_gamma': norm_gammas[i],
                 'norm_Faxial': normFaxs[i],
                 'Omega': Omegas[i],
-                'TSR': Omegas[i]*ROTOR.R,}
+                'TSR': Omegas[i]*ROTOR.R,
+                'alpha':alphas[i],
+                'inflow':inflows[i]}
             CT, CP = self._calculateCT_CProtor_CPflow(ROTOR, np.average(Faxials[i], axis=0), np.average(Fazims[i], axis=0))
             ROTOR.results['CT'] = CT
             ROTOR.results['CP'] = CP
@@ -310,7 +314,7 @@ class DualRotorExperiment:
         self.aw=aw
         wakerevs = [5, 5]
         self.ROTORS = [self._init_Rotor(ROTORS[i], wakerevs[i]) for i in range(len(ROTORS))]
-        self.base_rotors = copy.deepcopy(self.ROTORS)
+        self.base_rotors = [ROT.copy() for ROT in self.ROTORS]#copy.deepcopy(self.ROTORS)
         self.nrotors = len(self.base_rotors)
 
     @staticmethod
@@ -383,38 +387,41 @@ class DualRotorExperiment:
         rot = np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
         return rot
 
-    def plot_instantaneous(self, lw = 0.75, c='k')->None:
-        for rotor in self.ROTORS:
-            fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(14, 7))
+    def plot_instantaneous(self, lw = 0.75, fs=4)->None:
+        colors = ['k',  'b', 'g']
+        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(14, 7))
+        for r, rotor in enumerate(self.ROTORS):
+            c = colors[r]
+            print(c)
             for i in range(rotor.nblades):
-                axes[0,0].plot(rotor.results['r_R'][i], rotor.results['Gamma'][i], marker='o', color=c,label='$\\tilde{\Gamma}$: '+f'blade_idx={i}', linewidth=lw)
-                axes[0,1].plot(rotor.results['r_R'][i], rotor.results['Faxial'][i], marker='o', color=c, label='$\\tilde{F}_{axial}$: '+f'blade_idx={i}', linewidth=lw)
-                axes[0,1].plot(rotor.results['r_R'][i], rotor.results['Fazim'][i], linestyle='--', marker='s',color=c, label='$\\tilde{F}_{azim}$: '+f'blade_idx={i}', linewidth=lw)
-                axes[1,0].plot(rotor.results['r_R'][i], rotor.results['a'][i], marker='o', color=c,label='$a$: '+f'blade_idx={i}', linewidth=lw)
-                axes[1,0].plot(rotor.results['r_R'][i], rotor.results['aline'][i], marker='s', linestyle='--', color=c,label='$a^{,}$: '+f'blade_idx={i}', linewidth=lw)
-                #axes[1,1].plot(rotor.results['r_R'][i], rotor.results['alpha'][i], marker='o', color=c,label='$\\alpha$: '+f'blade_idx={i}', linewidth=lw)
-                #axes[1,1].plot(rotor.results['r_R'][i], rotor.results['inflow'][i], marker='o',linestyle='--', color=c, label='$\phi$: ' + f'blade_idx={i}', linewidth=lw)
-            axes[0, 0].grid()
-            axes[0, 0].set_ylim(bottom=0)
-            axes[0, 0].set_ylabel('$\\tilde{\Gamma}$')
-            axes[0, 0].legend()
-            axes[0, 1].set_ylim(bottom=0)
-            axes[0, 1].set_ylabel('$\\tilde{F}$')
-            axes[0, 1].grid()
-            axes[0, 1].legend()
-            axes[1, 0].set_ylim(bottom=0)
-            axes[1, 0].grid()
-            axes[1, 0].legend()
-            axes[1, 0].set_ylabel('$a$')
-            axes[1, 1].set_xlabel('$r/R$')
-            axes[1,1].set_ylim(bottom=0)
-            axes[1,1].set_ylabel('$\\alpha, \phi$')
-            #axes[1,1].legend()
-            axes[1, 1].grid()
-            axes[1,1].set_xlabel('$r/R$')
-            fig.tight_layout()
-            plt.show()
-
+                leg_str = f'blade_idx={i+1}, '+f'rotor_idx={r+1}'
+                axes[0,0].plot(rotor.results['r_R'][i], rotor.results['Gamma'][i], marker='o', color=c,label='$\\tilde{\Gamma}$: '+leg_str, linewidth=lw)
+                axes[0,1].plot(rotor.results['r_R'][i], rotor.results['Faxial'][i], marker='o', color=c, label='$\\tilde{F}_{axial}$: '+leg_str, linewidth=lw)
+                axes[0,1].plot(rotor.results['r_R'][i], rotor.results['Fazim'][i], linestyle='--', marker='s',color=c, label='$\\tilde{F}_{azim}$: '+leg_str, linewidth=lw)
+                axes[1,0].plot(rotor.results['r_R'][i], rotor.results['a'][i], marker='o', color=c,label='$a$: '+leg_str, linewidth=lw)
+                axes[1,0].plot(rotor.results['r_R'][i], rotor.results['aline'][i], marker='s', linestyle='--', color=c,label='$a^{,}$: '+leg_str, linewidth=lw)
+                axes[1,1].plot(rotor.results['r_R'][i], rotor.results['alpha'][i], marker='o', color=c,label='$\\alpha$: '+leg_str, linewidth=lw)
+                axes[1,1].plot(rotor.results['r_R'][i], rotor.results['inflow'][i], marker='o',linestyle='--', color=c, label='$\phi$: ' +leg_str, linewidth=lw)
+        axes[0, 0].grid()
+        axes[0, 0].set_ylim(bottom=0)
+        axes[0, 0].set_ylabel('$\\tilde{\Gamma}$')
+        axes[0, 0].legend(fontsize=fs)
+        axes[0, 1].set_ylim(bottom=0)
+        axes[0, 1].set_ylabel('$\\tilde{F}$')
+        axes[0, 1].grid()
+        axes[0, 1].legend(fontsize=fs)
+        axes[1, 0].set_ylim(bottom=0)
+        axes[1, 0].grid()
+        axes[1, 0].legend(fontsize=fs)
+        axes[1, 0].set_ylabel('$a$')
+        axes[1, 1].set_xlabel('$r/R$')
+        axes[1,1].set_ylim(bottom=0)
+        axes[1,1].set_ylabel('$\\alpha, \phi$')
+        axes[1,1].legend(fontsize=fs)
+        axes[1, 1].grid()
+        axes[1,1].set_xlabel('$r/R$')
+        fig.tight_layout()
+        plt.show()
 
 
 
@@ -422,8 +429,8 @@ class DualRotorExperiment:
 if __name__ == '__main__':
     Qinf = np.array([1, 0, 0])
 
-    ROTOR1 = Rotor(R=50,dtheta=np.pi/10, N=8,TSR=10,geomfunc=rw.rotor_blade,nblades=3,blade_bounds=(0.2,1),direction=1)
-    ROTOR2 = Rotor(R=50,dtheta=np.pi/10, N=8, TSR=6, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=-1)
+    ROTOR1 = Rotor(R=50,dtheta=np.pi/10, N=11,TSR=6,geomfunc=rw.rotor_blade,nblades=3,blade_bounds=(0.2,1),direction=1)
+    ROTOR2 = Rotor(R=50,dtheta=np.pi/10, N=8, TSR=8, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=1)
     DR = DualRotorExperiment(ROTORS=(ROTOR1, ROTOR2), Qinf=Qinf, )
     DR.simulate(delta_phi_0s=(0, np.radians(30)), delta_Ls=(0, 200))
 
