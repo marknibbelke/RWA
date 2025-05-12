@@ -201,7 +201,7 @@ class MultiWakeSim(rw.VortexSim):
         if elem_bounds_new is not None:
             self.elem_bounds = elem_bounds_new
 
-    def iter_solve(self, ROTORs: list[Rotor], niter=600, tol=1e-6, plot: bool = True, method='broyden1', verbose: bool = True)->dict:
+    def iter_solve(self, ROTORs: list[Rotor], niter=600, tol=1e-6, plot: bool = True, method='broyden1', verbose: bool = True)->None:
         rotor_ids = np.concatenate([np.full(rotor.xyzi.shape[0], i) for i, rotor in enumerate(ROTORs)])
         uvws = np.sum(self.uvws, axis=2)
         Omegas = [rot.TSR/rot.R for rot in ROTORs]
@@ -259,7 +259,6 @@ class MultiWakeSim(rw.VortexSim):
             CT, CP = self._calculateCT_CProtor_CPflow(ROTOR, np.average(Faxials[i], axis=0), np.average(Fazims[i], axis=0))
             ROTOR.results['CT'] = CT
             ROTOR.results['CP'] = CP
-        return self.results
 
     @staticmethod
     def read_polar(airfoil: str, plot: bool = False):
@@ -338,7 +337,7 @@ class DualRotorExperiment:
     def simulate(self, delta_phi_0s: tuple[float, ...], delta_Ls: tuple[float, ...], plot: bool = True):
         self._reset_rotors()
         for i in range(self.nrotors):
-            rotMat = self.x_rotstion_matrix(angle=delta_phi_0s[i])
+            rotMat = self.x_rotation_matrix(angle=delta_phi_0s[i])
             self.ROTORS[i].rotate(rotMat)
             self.ROTORS[i].translate(displVec=np.array([0, delta_Ls[i], 0]))
         xyzi = np.vstack(([ROTOR.xyzi for ROTOR in self.ROTORS]))
@@ -346,7 +345,6 @@ class DualRotorExperiment:
         ni = np.concatenate(([ROTOR.ni for ROTOR in self.ROTORS]))
         self.rotor_ids = np.concatenate([np.full(rotor.xyzi.shape[0], i) for i, rotor in enumerate(self.ROTORS)])
         if plot:
-            print(xyzj.shape, xyzj[self.rotor_ids==0].shape)
             fig = plt.figure(figsize=(12, 7))
             ax = fig.add_subplot(111, projection='3d')
             ax.set_proj_type('persp', focal_length=0.2)
@@ -375,9 +373,10 @@ class DualRotorExperiment:
         ebs = np.concatenate(([ROTOR.elem_boundaries for ROTOR in self.ROTORS]))
         rotorsim = MultiWakeSim(xyzi, xyzj, ni, ebs, self.Qinf,)
         rotorsim.iter_solve(ROTORs=self.ROTORS, )
+        #print(self.ROTORS[0].results)
         return
 
-    def x_rotstion_matrix(self, angle):
+    def x_rotation_matrix(self, angle):
         c = np.cos(angle)
         s = np.sin(angle)
         rot = np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
