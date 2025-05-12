@@ -139,18 +139,19 @@ class VortexSim(ABC):
 
 class MultiWakeSim(VortexSim):
     def __init__(self, ROTORs: list[Rotor], Qinf, airfoil: str = '../DU95W180.txt'):
-        self.xyzi = np.vstack(([ROTOR.xyzi for ROTOR in ROTORs]))
-        self.xyzj = np.vstack(([ROTOR.xyzj for ROTOR in ROTORs]))
-        self.ni = np.concatenate(([ROTOR.ni for ROTOR in ROTORs]))
+        self.xyzi, self.xyzj, self.ni = self._compile(ROTORs)
         super().__init__(self.xyzi, self.xyzj, self.ni, Qinf)
         self.ROTORs=ROTORs
         self.polar_alpha, self.polar_cl, self.polar_cd = self.read_polar(airfoil, plot=False)
         self.twists, self.chords = [], []
 
-    def direct_solve(self):
-        pass
+    def _compile(self, ROTORs: list[Rotor]):
+        xyzi = np.vstack(([ROTOR.xyzi for ROTOR in ROTORs]))
+        xyzj = np.vstack(([ROTOR.xyzj for ROTOR in ROTORs]))
+        ni = np.concatenate(([ROTOR.ni for ROTOR in ROTORs]))
+        return xyzi, xyzj, ni
 
-    def _post_update_hook(self, *args, **kwargs):
+    def direct_solve(self):
         pass
 
     def plot_instantaneous(self, lw = 0.75, fs=4)->None:
@@ -307,7 +308,7 @@ def cosine_spacing(a, b, N):
     return np.flip(x)
 
 
-def rotor_wake(theta_array, ri_elem_boundaries, ROTOR, aw=0.2, fcp=0.75, fbound = 1/4, plot: bool = False)->Rotor:
+def rotor_wake(theta_array, ri_elem_boundaries, ROTOR: Rotor, aw=0.2, fcp=0.75, fbound = 1/4, plot: bool = False)->Rotor:
     '''
     :param N: Number of blade partitions
     :param k2: number of partitions per trailing vortex (i.e. k:=dim(ring_i) = 2*k_2)
