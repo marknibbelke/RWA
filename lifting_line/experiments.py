@@ -234,6 +234,11 @@ class MultiWakeSim(rw.VortexSim):
         vazim = np.einsum('ij,ij->i', azimdir, vel1s)
         vaxial = vel1s[:, 0]
         temploads =  self._loadBladeElement(vaxial, vazim,)
+        r_Rs = [np.array(self.radial_positions[rotor_ids==i] / ROTOR.R) for i, ROTOR in enumerate(ROTORs)]
+        r_Rs = [r_Rs[i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
+        alines = [(vazim[rotor_ids==i]/(self.radial_positions[rotor_ids==i] * Omegas[i])-1).reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
+        a = -(uvw[:, 0] + vrot[:, 0] / self.Qinf[0])
+        a_s = [a[rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades))for i, ROTOR in enumerate(ROTORs)]
         ''' 
         r_R = self.radial_positions / ROTOR.R
         r_R = r_R.reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
