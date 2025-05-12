@@ -295,6 +295,7 @@ class RotorWakeSim(VortexSim):
         self.results['CP'] = np.sum(drtemp * Fazim  * r_R_temp * self.results['Omega']  * self.nblades / (0.5 * Uinf ** 2 * np.pi))
 
 
+
 def rotor_blade(r_R):
     pitch = 2
     chord = 3 * (1 - r_R) + 1

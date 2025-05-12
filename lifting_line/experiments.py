@@ -201,9 +201,8 @@ class MultiWakeSim(rw.VortexSim):
         if elem_bounds_new is not None:
             self.elem_bounds = elem_bounds_new
 
-    def iter_solve(self, ROTORs: tuple[Rotor, ...], niter=600, tol=1e-6, plot: bool = True, method='broyden1', verbose: bool = True)->dict:
-        rotor_ids = np.concatenate([
-            np.full(rotor.xyzi.shape[0], i) for i, rotor in enumerate(ROTORs)])
+    def iter_solve(self, ROTORs: list[Rotor], niter=600, tol=1e-6, plot: bool = True, method='broyden1', verbose: bool = True)->dict:
+        rotor_ids = np.concatenate([np.full(rotor.xyzi.shape[0], i) for i, rotor in enumerate(ROTORs)])
         uvws = np.sum(self.uvws, axis=2)
         Omegas = [rot.TSR/rot.R for rot in ROTORs]
         Omega_vecs = [np.array([-Omegai, 0, 0]) for Omegai in Omegas]
@@ -345,6 +344,33 @@ class DualRotorExperiment:
         xyzi = np.vstack(([ROTOR.xyzi for ROTOR in self.ROTORS]))
         xyzj = np.vstack(([ROTOR.xyzj for ROTOR in self.ROTORS]))
         ni = np.concatenate(([ROTOR.ni for ROTOR in self.ROTORS]))
+        self.rotor_ids = np.concatenate([np.full(rotor.xyzi.shape[0], i) for i, rotor in enumerate(self.ROTORS)])
+        if plot:
+            print(xyzj.shape, xyzj[self.rotor_ids==0].shape)
+            fig = plt.figure(figsize=(12, 7))
+            ax = fig.add_subplot(111, projection='3d')
+            ax.set_proj_type('persp', focal_length=0.2)
+            ax.view_init(5, -125, 0)
+            ax.grid(False)
+            ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            for r in range(self.nrotors):
+                rotor_xyzj = xyzj[self.rotor_ids == r]
+                rotor_xyzj = rotor_xyzj.reshape(self.ROTORS[r].nblades, self.ROTORS[r].N, rotor_xyzj.shape[1],3)
+                for bi in range(self.ROTORS[r].nblades):
+                    for i in range(self.ROTORS[r].N):
+                        ax.plot(
+                            rotor_xyzj[bi,i, :, 0],
+                            rotor_xyzj[bi,i, :, 1],
+                            rotor_xyzj[bi,i, :, 2],
+                            color='b', linewidth=0.2)
+            plt.gca().set_aspect('equal')
+            plt.xlabel('x')
+            plt.ylabel('y')
+            plt.gca().set_zlabel('z')
+            plt.tight_layout()
+            plt.show()
         ebs = np.concatenate(([ROTOR.elem_boundaries for ROTOR in self.ROTORS]))
         rotorsim = MultiWakeSim(xyzi, xyzj, ni, ebs, self.Qinf,)
         rotorsim.iter_solve(ROTORs=self.ROTORS, )
@@ -353,7 +379,7 @@ class DualRotorExperiment:
     def x_rotstion_matrix(self, angle):
         c = np.cos(angle)
         s = np.sin(angle)
-        rot = np.array([[1, c, 0], [0, c, -s], [0, s, c]])
+        rot = np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
         return rot
 
 
@@ -363,9 +389,9 @@ class DualRotorExperiment:
 if __name__ == '__main__':
     Qinf = np.array([1,0,0])
     ROTOR1 = Rotor(R=50,dtheta=np.pi/10, N=11,TSR=8,geomfunc=rw.rotor_blade,nblades=3,blade_bounds=(0.2,1),)
-    ROTOR2 = Rotor(R=50,dtheta=np.pi/10, N=11, TSR=8, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1))
+    ROTOR2 = Rotor(R=50,dtheta=np.pi/10, N=6, TSR=10, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1))
     DR = DualRotorExperiment(ROTORS=(ROTOR1, ROTOR2), Qinf=Qinf, )
-    DR.simulate(delta_phi_0s=(0, np.radians(30), 0), delta_Ls=(0, 100))
+    DR.simulate(delta_phi_0s=(0, np.radians(30),), delta_Ls=(0, 200))
 
     #E = SingleRotorExperiment(R=50, nblades=3, Qinf=Qinf)
     #E.collect_variable(TSR=6, aw=0.2, N=11, revolutions=50, dtheta=np.linspace(np.pi/50,np.pi/2, 3), spacing='cosine')
