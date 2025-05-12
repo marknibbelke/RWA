@@ -156,6 +156,15 @@ class RotorWakeSim(VortexSim):
         if elem_bounds_new is not None:
             self.elem_bounds = elem_bounds_new
 
+    def __add__(self, other):
+        xyzi_combined = np.vstack((self.xyzi, other.xyzi))
+        xyzj_combined = np.vstack((self.xyzj, other.xyzj))
+        ni_combined = np.vstack((self.ni, other.ni))
+        elem_bounds_combined = np.concatenate((self.elem_bounds, other.elem_bounds))
+        R = (self.R, other.R)
+        nblades = (self.nblades, other.nblades)
+        return RotorWakeSim(xyzi_combined, xyzj_combined, ni_combined, elem_bounds_combined, self.Qinf, R, self.geomfunc, nblades, airfoil = '../DU95W180.txt')
+
     def direct_solve(self, *args, **kwargs):
         pass
 

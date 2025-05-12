@@ -1,7 +1,7 @@
 import rotorWake            as rw
 import matplotlib.pyplot    as plt
 import numpy                as np
-
+from dataclasses            import dataclass
 
 class SingleRotorExperiment:
     def __init__(self, R, nblades: int, Qinf, bladefunc: callable = rw.rotor_blade, blade_bounds:tuple=(0.2, 1)):
@@ -148,23 +148,76 @@ class SingleRotorExperiment:
         self.plot_compiled_results()
 
 
+
+
+
+@dataclass
+class Rotor:
+    R: float
+    xyzi: np.ndarray
+    xyzj: np.ndarray
+    ni: np.ndarray
+    elem_boundaries: np.ndarray
+    N: int
+
 class DualRotorExperiment:
-    def __init__(self, xyzis: tuple, xyzjs: tuple, nis: tuple, Qinf, Rs, elemboundss, geomfunc:callable=rw.rotor_blade, nbladess=3, ):
-        self.xyzi_1, self.xyzi_2 = xyzis
-        self.xyzj_1, self.xyzj_2 = xyzjs
-        self.ni_1, self.ni_2 = nis
+    def __init__(self, TSRs: tuple, Ns:tuple, dthetas:tuple, Qinf, R, aw = 0.2, geomfunc:callable=rw.rotor_blade, nblades=3, spacing='cosine', blade_bounds:tuple=(0.2, 1)):
+        self.spacing = 'cosine'
+        self.R = R
+        self.nblades = nblades
         self.Qinf = Qinf
-        self.R1, self.R2 = Rs
-        self.elembounds_1, self.elembounds_2 = elemboundss
-        self.geomfunc = geomfunc
-        self.nblades_1, self.nblades_2 = nbladess
+        self.bladefunc = geomfunc
+        self.blade_bounds = blade_bounds
+        self.method_dict = {'cosine': self.cosine_spacing, 'linear': self.linear_spacing}
+        self.geomfunc = rw.rotor_wake
+        self.aw=aw
+        self.TSRs = TSRs
+
+        self.rev1 = 5
+        self.rev2 = 5
+
+        ROTOR1 = self._assemble_rotor(TSR=TSRs[0], N=Ns[0], dtheta=dthetas[0], revolutions=self.rev1)
+        ROTOR2 = self._assemble_rotor(TSR=TSRs[1], N=Ns[1], dtheta=dthetas[1], revolutions=self.rev2)
+
+    @staticmethod
+    def cosine_spacing(a, b, N):
+        return rw.cosine_spacing(a, b, N)
+
+    @staticmethod
+    def linear_spacing(a, b, N):
+        return np.linspace(a, b, N+1)
+
+    def _assemble_rotor(self, TSR, N, dtheta, revolutions):
+        theta_array = np.arange(0, revolutions * 2 * np.pi, dtheta)
+        ri_elem_boundaries = self.method_dict[self.spacing](0.2 * self.R, self.R, N)
+        xyzi, xyzj, ni, _ = rw.rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=self.geomfunc, R=self.R, TSR=TSR / (1 - self.aw), nblades=self.nblades, plot=True, fbound=0., fcp=0., )
+        return Rotor(xyzi=xyzi, xyzj=xyzj, ni=ni, N=N, elem_boundaries=ri_elem_boundaries, R=self.R)
+
+    def simulate(self):
+        return
+
+    def rotate_x_axis(self, ROTOR: Rotor, angle):
+        c = np.cos(angle)
+        s = np.sin(angle)
+        rot = np.array([[1, c, 0],
+                        [0, c, -s],
+                        [0, s, c]])
+        ROTOR.xyzi = np.einsum('bj,aj->ba', ROTOR.xyzi, rot)
+        ROTOR.xyzj = np.einsum('bcj,aj->bca', ROTOR.xyzj, rot)
+        ROTOR.ni = np.einsum('bj,aj->ba', ROTOR.ni, rot)
+        return ROTOR
+
+    def translate(self, ROTOR: Rotor, t_vec):
+        ROTOR.xyzi += t_vec[None, :]
+        ROTOR.xyzj += t_vec[None, None, :]
+        return ROTOR
 
 
 if __name__ == '__main__':
     Qinf = np.array([1,0,0])
     E = SingleRotorExperiment(R=50, nblades=3, Qinf=Qinf)
     #E.collect_variable(TSR=6, aw=0.2, N=11, revolutions=50, dtheta=np.linspace(np.pi/50,np.pi/2, 3), spacing='cosine')
-    #E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=50, revolutions=15, dtheta=np.pi/10, spacing='cosine', monitor=False)
+    E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=25, revolutions=50, dtheta=np.pi/10, spacing='cosine', monitor=False)
     #E.collect_variable(TSR=6, aw=np.array([.05, .35, .65]), N=11, revolutions=50, dtheta=np.pi / 10, spacing='cosine')
     #E.collect_variable(TSR=6, aw=0.2, N=25, revolutions=np.array([.5, 5, 50]), dtheta=np.pi/10, spacing='cosine')
     #E.collect_convergence(TSR=6, aw=0.2, N=np.linspace(1, 40, 7, dtype=int), revolutions=50, dtheta=np.pi/10, spacing=np.array(['linear', 'cosine']))
