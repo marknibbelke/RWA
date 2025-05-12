@@ -1,8 +1,11 @@
 import rotorWake            as rw
 import matplotlib.pyplot    as plt
 import numpy                as np
-from dataclasses            import dataclass, asdict, field
+from   dataclasses          import dataclass, asdict, field
+from   scipy.optimize       import newton_krylov, root
 import copy
+import pandas               as pd
+
 
 class SingleRotorExperiment:
     def __init__(self, R, nblades: int, Qinf, bladefunc: callable = rw.rotor_blade, blade_bounds:tuple=(0.2, 1)):
@@ -149,9 +152,6 @@ class SingleRotorExperiment:
         self.plot_compiled_results()
 
 
-
-
-
 @dataclass
 class Rotor:
     R: float
@@ -184,6 +184,126 @@ class Rotor:
         self.xyzj += displVec[None, None, :]
 
 
+class MultiWakeSim(rw.VortexSim):
+    def __init__(self, xyzi, xyzj, ni, elem_boundaries, Qinf, airfoil: str = '../DU95W180.txt'):
+        super().__init__(xyzi, xyzj, ni, Qinf)
+        self.elem_bounds = elem_boundaries
+        self.polar_alpha, self.polar_cl, self.polar_cd = self.read_polar(airfoil, plot=False)
+        self.radial_positions = np.sqrt(np.einsum('ij, ij->i', xyzi, xyzi))
+        self.twists, self.chords = [], []
+        self.results = {}
+
+    def direct_solve(self):
+        pass
+    def _post_update_hook(self, *args, **kwargs):
+        self.radial_positions = np.sqrt(np.einsum('ij, ij->i', self.xyzi, self.xyzi))
+        elem_bounds_new = kwargs.get("elem_bounds_new", None)
+        if elem_bounds_new is not None:
+            self.elem_bounds = elem_bounds_new
+
+    def iter_solve(self, ROTORs: tuple[Rotor, ...], niter=600, tol=1e-6, plot: bool = True, method='broyden1', verbose: bool = True)->dict:
+        rotor_ids = np.concatenate([
+            np.full(rotor.xyzi.shape[0], i) for i, rotor in enumerate(ROTORs)])
+        uvws = np.sum(self.uvws, axis=2)
+        Omegas = [rot.TSR/rot.R for rot in ROTORs]
+        Omega_vecs = [np.array([-Omegai, 0, 0]) for Omegai in Omegas]
+        self.chords, self.twists = map(lambda arrs: np.concatenate(arrs),zip(*[
+                rot.geomfunc(self.radial_positions[rotor_ids == i] / rot.R)
+                for i, rot in enumerate(ROTORs)]))
+        N = self.xyzi.shape[0]
+        gammas0 = np.zeros(N)
+        eijk = np.zeros((3, 3, 3), dtype=int)
+        eijk[0, 1, 2] = eijk[1, 2, 0] = eijk[2, 0, 1] = 1
+        eijk[0, 2, 1] = eijk[2, 1, 0] = eijk[1, 0, 2] = -1
+        orthogonals = np.array([-1 / self.radial_positions, np.zeros_like(self.radial_positions), np.zeros_like(self.radial_positions)]).T
+        vrot = np.vstack([np.einsum('ijk, ...j, ...k', eijk, Omega_veci, self.xyzi[rotor_ids == i]) for i, Omega_veci in enumerate(Omega_vecs)])
+        azimdir = np.einsum('ijk, ...j, ...k', eijk, orthogonals, self.xyzi)
+
+        def _F(gammas):
+            uvw = np.einsum('ijk, j -> ik', uvws, gammas)
+            vel1s = self.Qinf[None, :] + uvw + vrot
+            vazim = np.einsum('ij,ij->i', azimdir, vel1s)
+            vaxial = vel1s[:, 0]
+            temploads = self._loadBladeElement(vaxial, vazim,)
+            gamma_new = temploads[2].copy()
+            return gamma_new - gammas
+
+        sol = root(_F, gammas0, method=method, tol=tol, options={'maxiter': niter, 'disp': verbose})
+        print(sol.message)
+        uvw = np.einsum('ijk,j->ik', uvws, sol.x)
+        vel1s = self.Qinf[None, :] + uvw + vrot
+        vazim = np.einsum('ij,ij->i', azimdir, vel1s)
+        vaxial = vel1s[:, 0]
+        temploads =  self._loadBladeElement(vaxial, vazim,)
+        ''' 
+        r_R = self.radial_positions / ROTOR.R
+        r_R = r_R.reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+        aline = (vazim / (self.radial_positions * Omega) - 1).reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+        a = -(uvw[:, 0] + vrot[:, 0] / self.Qinf[0]).reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+        GAMMAS_new = sol.x.reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+        normGamma = np.linalg.norm(self.Qinf) ** 2 * np.pi / (ROTOR.nblades * Omega)
+        Faxial = temploads[0].reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+        Fazim = temploads[1].reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+        normFax = .5 * np.linalg.norm(self.Qinf) ** 2 * ROTOR.R
+        self.results['r_R'] = r_R[0]
+        self.results['Gamma'] = np.average(GAMMAS_new, axis=0) / normGamma
+        self.results['Faxial'] = np.average(Faxial, axis=0) / normFax
+        self.results['Fazim'] = np.average(Fazim, axis=0) / normFax
+        self.results['a'] = np.average(a, axis=0)
+        self.results['aline'] = np.average(aline, axis=0)
+        self.results['Omega'] = Omega
+        self.results['TSR'] = Omega * ROTOR.R
+        self.results['alpha'] = np.average(temploads[3].reshape(r_R.shape), axis=0)
+        self.results['inflow'] = np.average(temploads[4].reshape(r_R.shape), axis=0)
+        self.results['N'] = N
+        self._calculateCT_CProtor_CPflow(np.average(Faxial, axis=0), np.average(Fazim, axis=0))
+        
+        if plot:
+            print(f'\nPlotting results:\nTSR={Omega * ROTOR.R}, N={uvws.shape[0]}\n')
+        '''
+        return self.results
+
+    @staticmethod
+    def read_polar(airfoil: str, plot: bool = False):
+        data1 = pd.read_csv(airfoil, header=0, names=["alfa", "cl", "cd", "cm"], sep='\s+')
+        polar_alpha = data1['alfa'][:].to_numpy().astype(float)
+        polar_cl = data1['cl'][:].to_numpy().astype(float)
+        polar_cd = data1['cd'][:].to_numpy().astype(float)
+        if plot:
+            fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+            axs[0].plot(polar_alpha, polar_cl)
+            axs[0].set_xlabel(r'$\alpha$')
+            axs[0].set_ylabel(r'$C_l$')
+            axs[0].grid()
+            axs[1].plot(polar_cd, polar_cl)
+            axs[1].set_xlabel(r'$C_d$')
+            axs[1].grid()
+            plt.show()
+        return np.radians(polar_alpha), polar_cl, polar_cd
+
+    def _loadBladeElement(self, vnorm, vtan, ):
+        vmag2 = vnorm ** 2 + vtan ** 2
+        inflowangle = np.arctan2(vnorm, vtan)
+        alpha = self.twists + inflowangle
+        cl = np.interp(alpha, self.polar_alpha, self.polar_cl)
+        cd = np.interp(alpha, self.polar_alpha, self.polar_cd) * 0
+        lift = 0.5 * vmag2 * cl * self.chords
+        drag = 0.5 * vmag2 * cd * self.chords
+        fnorm = lift * np.cos(inflowangle) + drag * np.sin(inflowangle)
+        ftan = lift * np.sin(inflowangle) - drag * np.cos(inflowangle)
+        gamma = 0.5 * np.sqrt(vmag2) * cl * self.chords
+        return fnorm, ftan, gamma, alpha, inflowangle
+
+    def _calculateCT_CProtor_CPflow(self, Faxial, Fazim)->None:
+        r_Rarray = self.elem_bounds/self.R
+        r_R_temp = 1 / 2 * (r_Rarray[:-1] + r_Rarray[1:])
+        drtemp = np.diff(r_Rarray)
+        Uinf = np.linalg.norm(self.Qinf)
+        self.results['CT'] = np.sum(drtemp * Faxial * self.nblades / (0.5 * Uinf ** 2 * np.pi * self.R))
+        self.results['CP'] = np.sum(drtemp * Fazim  * r_R_temp * self.results['Omega']  * self.nblades / (0.5 * Uinf ** 2 * np.pi))
+
+
+
 class DualRotorExperiment:
     def __init__(self, ROTORS: tuple[Rotor, ...], Qinf, aw = 0.2, spacing='cosine'):
         self.spacing = spacing
@@ -209,13 +329,25 @@ class DualRotorExperiment:
     def _init_Rotor(self, ROTOR: Rotor, revolutions)->Rotor:
         theta_array = np.arange(0, revolutions * 2 * np.pi, ROTOR.dtheta)
         ri_elem_boundaries = self.method_dict[self.spacing](0.2 * ROTOR.R, ROTOR.R, ROTOR.N)
-        xyzi, xyzj, ni, _ = rw.rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=ROTOR.N, geom_func=ROTOR.geomfunc, R=ROTOR.R, TSR=ROTOR.TSR / (1 - self.aw), nblades=ROTOR.nblades, plot=True, fbound=0., fcp=0., )
+        xyzi, xyzj, ni, _ = rw.rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=ROTOR.N, geom_func=ROTOR.geomfunc, R=ROTOR.R, TSR=ROTOR.TSR / (1 - self.aw), nblades=ROTOR.nblades, plot=False, fbound=0., fcp=0., )
+        ROTOR.xyzi=xyzi
+        ROTOR.xyzj=xyzj
+        ROTOR.ni=ni
+        ROTOR.elem_boundaries=ri_elem_boundaries
         return ROTOR
 
-    def simulate(self, delta_phi_0s: tuple[float, ...], delta_Ls: tuple[float, ...], ):
+    def simulate(self, delta_phi_0s: tuple[float, ...], delta_Ls: tuple[float, ...], plot: bool = True):
         self._reset_rotors()
-        for i in rangeself.ROTORS:
-
+        for i in range(self.nrotors):
+            rotMat = self.x_rotstion_matrix(angle=delta_phi_0s[i])
+            self.ROTORS[i].rotate(rotMat)
+            self.ROTORS[i].translate(displVec=np.array([0, delta_Ls[i], 0]))
+        xyzi = np.vstack(([ROTOR.xyzi for ROTOR in self.ROTORS]))
+        xyzj = np.vstack(([ROTOR.xyzj for ROTOR in self.ROTORS]))
+        ni = np.concatenate(([ROTOR.ni for ROTOR in self.ROTORS]))
+        ebs = np.concatenate(([ROTOR.elem_boundaries for ROTOR in self.ROTORS]))
+        rotorsim = MultiWakeSim(xyzi, xyzj, ni, ebs, self.Qinf,)
+        rotorsim.iter_solve(ROTORs=self.ROTORS, )
         return
 
     def x_rotstion_matrix(self, angle):
@@ -233,7 +365,7 @@ if __name__ == '__main__':
     ROTOR1 = Rotor(R=50,dtheta=np.pi/10, N=11,TSR=8,geomfunc=rw.rotor_blade,nblades=3,blade_bounds=(0.2,1),)
     ROTOR2 = Rotor(R=50,dtheta=np.pi/10, N=11, TSR=8, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1))
     DR = DualRotorExperiment(ROTORS=(ROTOR1, ROTOR2), Qinf=Qinf, )
-
+    DR.simulate(delta_phi_0s=(0, np.radians(30), 0), delta_Ls=(0, 100))
 
     #E = SingleRotorExperiment(R=50, nblades=3, Qinf=Qinf)
     #E.collect_variable(TSR=6, aw=0.2, N=11, revolutions=50, dtheta=np.linspace(np.pi/50,np.pi/2, 3), spacing='cosine')
