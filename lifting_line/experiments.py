@@ -239,32 +239,26 @@ class MultiWakeSim(rw.VortexSim):
         alines = [(vazim[rotor_ids==i]/(self.radial_positions[rotor_ids==i] * Omegas[i])-1).reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
         a = -(uvw[:, 0] + vrot[:, 0] / self.Qinf[0])
         a_s = [a[rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades))for i, ROTOR in enumerate(ROTORs)]
-        ''' 
-        r_R = self.radial_positions / ROTOR.R
-        r_R = r_R.reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
-        aline = (vazim / (self.radial_positions * Omega) - 1).reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
-        a = -(uvw[:, 0] + vrot[:, 0] / self.Qinf[0]).reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
-        GAMMAS_new = sol.x.reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
-        normGamma = np.linalg.norm(self.Qinf) ** 2 * np.pi / (ROTOR.nblades * Omega)
-        Faxial = temploads[0].reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
-        Fazim = temploads[1].reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
-        normFax = .5 * np.linalg.norm(self.Qinf) ** 2 * ROTOR.R
-        self.results['r_R'] = r_R[0]
-        self.results['Gamma'] = np.average(GAMMAS_new, axis=0) / normGamma
-        self.results['Faxial'] = np.average(Faxial, axis=0) / normFax
-        self.results['Fazim'] = np.average(Fazim, axis=0) / normFax
-        self.results['a'] = np.average(a, axis=0)
-        self.results['aline'] = np.average(aline, axis=0)
-        self.results['Omega'] = Omega
-        self.results['TSR'] = Omega * ROTOR.R
-        self.results['alpha'] = np.average(temploads[3].reshape(r_R.shape), axis=0)
-        self.results['inflow'] = np.average(temploads[4].reshape(r_R.shape), axis=0)
-        self.results['N'] = N
-        self._calculateCT_CProtor_CPflow(np.average(Faxial, axis=0), np.average(Fazim, axis=0))
-        
-        if plot:
-            print(f'\nPlotting results:\nTSR={Omega * ROTOR.R}, N={uvws.shape[0]}\n')
-        '''
+        gammas = [sol.x[rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
+        norm_gammas = [np.linalg.norm(self.Qinf) ** 2 * np.pi / (ROTOR.nblades * Omegas[i]) for i, ROTOR in enumerate(ROTORs)]
+        Faxials = [temploads[0][rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
+        Fazims = [temploads[1][rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
+        normFaxs = [.5 * np.linalg.norm(self.Qinf) ** 2 * ROTOR.R for i, ROTOR in enumerate(ROTORs)]
+        for i, ROTOR in enumerate(ROTORs):
+            ROTOR.results = {
+                'r_R': r_Rs[i],
+                'Gamma': gammas[i]/norm_gammas[i],
+                'a': a_s[i],
+                'aline': alines[i],
+                'Faxial': Faxials[i]/ normFaxs[i],
+                'Fazim': Fazims[i]/ normFaxs[i],
+                'norm_gamma': norm_gammas[i],
+                'norm_Faxial': normFaxs[i],
+                'Omega': Omegas[i],
+                'TSR': Omegas[i]*ROTOR.R,}
+            CT, CP = self._calculateCT_CProtor_CPflow(ROTOR, np.average(Faxials[i], axis=0), np.average(Fazims[i], axis=0))
+            ROTOR.results['CT'] = CT
+            ROTOR.results['CP'] = CP
         return self.results
 
     @staticmethod
@@ -298,13 +292,14 @@ class MultiWakeSim(rw.VortexSim):
         gamma = 0.5 * np.sqrt(vmag2) * cl * self.chords
         return fnorm, ftan, gamma, alpha, inflowangle
 
-    def _calculateCT_CProtor_CPflow(self, Faxial, Fazim)->None:
-        r_Rarray = self.elem_bounds/self.R
+    def _calculateCT_CProtor_CPflow(self, ROTOR: Rotor, Faxial, Fazim):
+        r_Rarray = ROTOR.elem_boundaries/ ROTOR.R
         r_R_temp = 1 / 2 * (r_Rarray[:-1] + r_Rarray[1:])
         drtemp = np.diff(r_Rarray)
         Uinf = np.linalg.norm(self.Qinf)
-        self.results['CT'] = np.sum(drtemp * Faxial * self.nblades / (0.5 * Uinf ** 2 * np.pi * self.R))
-        self.results['CP'] = np.sum(drtemp * Fazim  * r_R_temp * self.results['Omega']  * self.nblades / (0.5 * Uinf ** 2 * np.pi))
+        CT = np.sum(drtemp * Faxial * ROTOR.nblades / (0.5 * Uinf ** 2 * np.pi * ROTOR.R))
+        CP = np.sum(drtemp * Fazim  * r_R_temp * ROTOR.results['Omega']  * ROTOR.nblades / (0.5 * Uinf ** 2 * np.pi))
+        return CT, CP
 
 
 
@@ -314,7 +309,7 @@ class DualRotorExperiment:
         self.Qinf = Qinf
         self.method_dict = {'cosine': self.cosine_spacing, 'linear': self.linear_spacing}
         self.aw=aw
-        wakerevs = [5, 5]
+        wakerevs = [50, 50]
         self.ROTORS = [self._init_Rotor(ROTORS[i], wakerevs[i]) for i in range(len(ROTORS))]
         self.base_rotors = copy.deepcopy(self.ROTORS)
         self.nrotors = len(self.base_rotors)
@@ -370,6 +365,7 @@ class DualRotorExperiment:
                             rotor_xyzj[bi,i, :, 1],
                             rotor_xyzj[bi,i, :, 2],
                             color='b', linewidth=0.2)
+            plt.xlim([0, 4 * self.ROTORS[0].R])
             plt.gca().set_aspect('equal')
             plt.xlabel('x')
             plt.ylabel('y')
