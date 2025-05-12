@@ -538,8 +538,6 @@ class SingleRotorExperiment:
 
 
 
-
-
 if __name__ == "__main__":
     'simulation parameters'
     N           = 11
@@ -550,7 +548,7 @@ if __name__ == "__main__":
     aw          = 0.2
     Qinf        = np.array([1, 0, 0])
 
-    ROTOR = Rotor(R=50, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=+1)
+    ROTOR = Rotor(R=50, geomfunc=rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=+1)
     E = SingleRotorExperiment(ROTOR=ROTOR, Qinf=Qinf)
     E.collect_variable(TSR=np.array([4, 6, 8]), aw=0.2, N=25, revolutions=50, dtheta=np.pi / 10, spacing='cosine', monitor=False)
     #E.collect_convergence(TSR=6, aw=0.2, N=np.array([2 ** k for k in range(1, 4)]), revolutions=50, dtheta=np.linspace(np.pi / 2, np.pi / 4, 2), spacing='cosine')
