@@ -418,7 +418,7 @@ def double_rotor_wake():
 
 if __name__ == "__main__":
     'simulation parameters'
-    N           = 31
+    N           = 11
     revolutions = 50
     TSR         = 6.0
     R           = 50

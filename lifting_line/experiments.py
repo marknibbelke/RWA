@@ -234,33 +234,34 @@ class MultiWakeSim(rw.VortexSim):
         vazim = np.einsum('ij,ij->i', azimdir, vel1s)
         vaxial = vel1s[:, 0]
         temploads =  self._loadBladeElement(vaxial, vazim,)
-        r_Rs = [np.array(radial_positions[i] / ROTOR.R) for i, ROTOR in enumerate(ROTORs)]
-        r_Rs = [r_Rs[i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
-        alines = [(vazim[rotor_ids==i]/(radial_positions[i] * Omegas[i])-1).reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
-        a = -(uvw[:, 0] + vrot[:, 0] / self.Qinf[0])
-        a_s = [a[rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades))for i, ROTOR in enumerate(ROTORs)]
-        gammas = [sol.x[rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
-        norm_gammas = [np.linalg.norm(self.Qinf) ** 2 * np.pi / (ROTOR.nblades * Omegas[i]) for i, ROTOR in enumerate(ROTORs)]
-        Faxials = [temploads[0][rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
-        Fazims = [temploads[1][rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
-        normFaxs = [.5 * np.linalg.norm(self.Qinf) ** 2 * ROTOR.R for i, ROTOR in enumerate(ROTORs)]
-        alphas = [temploads[3][rotor_ids==i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
-        inflows = [temploads[4][rotor_ids == i].reshape(ROTOR.nblades, int(r_Rs[i].size / ROTOR.nblades)) for i, ROTOR in enumerate(ROTORs)]
+
         for i, ROTOR in enumerate(ROTORs):
+            r_R = np.array(radial_positions[i] / ROTOR.R)
+            r_R = r_R.reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+            alines = (vazim[rotor_ids == i] / (radial_positions[i] * Omegas[i]) - 1).reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+            a = -(uvw[:, 0] + vrot[:, 0] / self.Qinf[0])
+            a_s = a[rotor_ids == i].reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+            gammas = sol.x[rotor_ids == i].reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+            norm_gammas = np.linalg.norm(self.Qinf) ** 2 * np.pi / (ROTOR.nblades * Omegas[i])
+            Faxials = temploads[0][rotor_ids == i].reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+            Fazims = temploads[1][rotor_ids == i].reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+            normFaxs = .5 * np.linalg.norm(self.Qinf) ** 2 * ROTOR.R
+            alphas = temploads[3][rotor_ids == i].reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
+            inflows = temploads[4][rotor_ids == i].reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
             ROTOR.results = {
-                'r_R': r_Rs[i],
-                'Gamma': gammas[i]/norm_gammas[i],
-                'a': a_s[i],
-                'aline': alines[i],
-                'Faxial': Faxials[i]/ normFaxs[i],
-                'Fazim': Fazims[i]/ normFaxs[i],
-                'norm_gamma': norm_gammas[i],
-                'norm_Faxial': normFaxs[i],
+                'r_R': r_R,
+                'Gamma': gammas/norm_gammas,
+                'a': a_s,
+                'aline': alines,
+                'Faxial': Faxials/ normFaxs,
+                'Fazim': Fazims/ normFaxs,
+                'norm_gamma': norm_gammas,
+                'norm_Faxial': normFaxs,
                 'Omega': Omegas[i],
                 'TSR': Omegas[i]*ROTOR.R,
-                'alpha':alphas[i],
-                'inflow':inflows[i]}
-            CT, CP = self._calculateCT_CProtor_CPflow(ROTOR, np.average(Faxials[i], axis=0), np.average(Fazims[i], axis=0))
+                'alpha':alphas,
+                'inflow':inflows}
+            CT, CP = self._calculateCT_CProtor_CPflow(ROTOR, np.average(Faxials, axis=0), np.average(Fazims, axis=0))
             ROTOR.results['CT'] = CT
             ROTOR.results['CP'] = CP
 
@@ -432,8 +433,7 @@ if __name__ == '__main__':
     ROTOR1 = Rotor(R=50,dtheta=np.pi/10, N=11,TSR=6,geomfunc=rw.rotor_blade,nblades=3,blade_bounds=(0.2,1),direction=1)
     ROTOR2 = Rotor(R=50,dtheta=np.pi/10, N=8, TSR=8, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=1)
     DR = DualRotorExperiment(ROTORS=(ROTOR1, ROTOR2), Qinf=Qinf, )
-    DR.simulate(delta_phi_0s=(0, np.radians(30)), delta_Ls=(0, 200))
-
+    DR.simulate(delta_phi_0s=(0, np.radians(30)), delta_Ls=(0, 200), plot=True)
 
     ROTOR = Rotor(R=50, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=+1)
     #E = SingleRotorExperiment(ROTOR=ROTOR, Qinf=Qinf)
