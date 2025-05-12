@@ -159,7 +159,6 @@ class MultiWakeSim(VortexSim):
         fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(14, 7))
         for r, rotor in enumerate(self.ROTORs):
             c = colors[r]
-            print(c)
             for i in range(rotor.nblades):
                 leg_str = f'blade_idx={i+1}, '+f'rotor_idx={r+1}'
                 axes[0,0].plot(rotor.results['r_R'][i], rotor.results['Gamma'][i], marker='o', color=c,label='$\\tilde{\Gamma}$: '+leg_str, linewidth=lw)
@@ -224,8 +223,8 @@ class MultiWakeSim(VortexSim):
         vazim = np.einsum('ij,ij->i', azimdir, vel1s)
         vaxial = vel1s[:, 0]
         temploads =  self._loadBladeElement(vaxial, vazim,)
-
         for i, ROTOR in enumerate(ROTORs):
+            #print(i)
             r_R = np.array(radial_positions[i] / ROTOR.R)
             r_R = r_R.reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
             alines = (vazim[rotor_ids == i] / (radial_positions[i] * Omegas[i]) - 1).reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
@@ -254,7 +253,7 @@ class MultiWakeSim(VortexSim):
             CT, CP = self._calculateCT_CProtor_CPflow(ROTOR, np.average(Faxials, axis=0), np.average(Fazims, axis=0))
             ROTOR.results['CT'] = CT
             ROTOR.results['CP'] = CP
-            if plot: self.plot_instantaneous()
+        if plot: self.plot_instantaneous()
 
     @staticmethod
     def read_polar(airfoil: str, plot: bool = False):
@@ -537,7 +536,72 @@ class SingleRotorExperiment:
         self.plot_compiled_results()
 
 
+class DualRotorExperiment:
+    def __init__(self, ROTORS: tuple[Rotor, ...], Qinf, aw = 0.2, spacing='cosine'):
+        self.spacing = spacing
+        self.Qinf = Qinf
+        self.method_dict = {'cosine': cosine_spacing, 'linear': self.linear_spacing}
+        self.aw=aw
+        wakerevs = [5, 5]
+        self.ROTORS = [self._init_Rotor(ROTORS[i], wakerevs[i]) for i in range(len(ROTORS))]
+        self.base_rotors = [ROT.copy() for ROT in self.ROTORS]#copy.deepcopy(self.ROTORS)
+        self.nrotors = len(self.base_rotors)
 
+    @staticmethod
+    def linear_spacing(a, b, N):
+        return np.linspace(a, b, N+1)
+
+    def _reset_rotors(self)->None:
+        self.ROTORS = self.base_rotors
+
+    def _init_Rotor(self, ROTOR: Rotor, revolutions)->Rotor:
+        theta_array = np.arange(0, revolutions * 2 * np.pi, ROTOR.dtheta)
+        ri_elem_boundaries = self.method_dict[self.spacing](0.2 * ROTOR.R, ROTOR.R, ROTOR.N)
+        ROTOR = rotor_wake(aw=self.aw, theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, ROTOR=ROTOR, plot=False, fbound=0., fcp=0., )
+        return ROTOR
+
+    def simulate(self, delta_phi_0s: tuple[float, ...], delta_Ls: tuple[float, ...], plot: bool = True):
+        self._reset_rotors()
+        for i in range(self.nrotors):
+            rotMat = self.x_rotation_matrix(angle=delta_phi_0s[i])
+            self.ROTORS[i].rotate(rotMat)
+            self.ROTORS[i].translate(displVec=np.array([0, delta_Ls[i], 0]))
+        rotorsim = MultiWakeSim(ROTORs=self.ROTORS, Qinf=self.Qinf, )
+        self.rotor_ids = np.concatenate([np.full(rotor.xyzi.shape[0], i) for i, rotor in enumerate(self.ROTORS)])
+        if plot:
+            fig = plt.figure(figsize=(12, 7))
+            ax = fig.add_subplot(111, projection='3d')
+            ax.set_proj_type('persp', focal_length=0.2)
+            ax.view_init(5, -125, 0)
+            ax.grid(False)
+            ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            for r in range(self.nrotors):
+                rotor_xyzj = self.ROTORS[r].xyzj
+                rotor_xyzj = rotor_xyzj.reshape(self.ROTORS[r].nblades, self.ROTORS[r].N, rotor_xyzj.shape[1],3)
+                for bi in range(self.ROTORS[r].nblades):
+                    for i in range(self.ROTORS[r].N):
+                        ax.plot(
+                            rotor_xyzj[bi,i, :, 0],
+                            rotor_xyzj[bi,i, :, 1],
+                            rotor_xyzj[bi,i, :, 2],
+                            color='b', linewidth=0.2)
+            plt.xlim([0, 4 * self.ROTORS[0].R])
+            plt.gca().set_aspect('equal')
+            plt.xlabel('x')
+            plt.ylabel('y')
+            plt.gca().set_zlabel('z')
+            plt.tight_layout()
+            plt.show()
+        rotorsim.iter_solve(plot=plot)
+        return
+
+    def x_rotation_matrix(self, angle):
+        c = np.cos(angle)
+        s = np.sin(angle)
+        rot = np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
+        return rot
 
 
 if __name__ == "__main__":
@@ -549,6 +613,11 @@ if __name__ == "__main__":
     nblades     = 3
     aw          = 0.2
     Qinf        = np.array([1, 0, 0])
+
+    ROTOR1 = Rotor(R=50, dtheta=np.pi / 10, N=11, TSR=6, geomfunc=rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=1)
+    ROTOR2 = Rotor(R=50, dtheta=np.pi / 10, N=8, TSR=8, geomfunc=rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=1)
+    DR = DualRotorExperiment(ROTORS=(ROTOR1, ROTOR2), Qinf=Qinf, )
+    DR.simulate(delta_phi_0s=(0, np.radians(30)), delta_Ls=(0, 200), plot=True)
 
     ROTOR = Rotor(R=50, geomfunc=rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=+1)
     E = SingleRotorExperiment(ROTOR=ROTOR, Qinf=Qinf)
