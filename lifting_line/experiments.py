@@ -1,7 +1,8 @@
 import rotorWake            as rw
 import matplotlib.pyplot    as plt
 import numpy                as np
-from dataclasses            import dataclass
+from dataclasses            import dataclass, asdict, field
+import copy
 
 class SingleRotorExperiment:
     def __init__(self, R, nblades: int, Qinf, bladefunc: callable = rw.rotor_blade, blade_bounds:tuple=(0.2, 1)):
@@ -154,30 +155,45 @@ class SingleRotorExperiment:
 @dataclass
 class Rotor:
     R: float
-    xyzi: np.ndarray
-    xyzj: np.ndarray
-    ni: np.ndarray
-    elem_boundaries: np.ndarray
     N: int
+    dtheta: float
+    TSR: float
+    geomfunc: callable
+    nblades: int
+    blade_bounds: tuple
+    results: dict = field(default_factory=dict)
+    elem_boundaries: np.ndarray = None
+    xyzi: np.ndarray = None
+    xyzj: np.ndarray = None
+    ni: np.ndarray = None
+
+    @staticmethod
+    def from_dict(data: dict) -> 'Rotor':
+        return Rotor(**data)
+
+    def copy(self) -> 'Rotor':
+        return Rotor(**asdict(self))
+
+    def rotate(self, rotMat: np.ndarray) ->None:
+        self.xyzi = np.einsum('bj,aj->ba', self.xyzi, rotMat)
+        self.xyzj = np.einsum('bcj,aj->bca', self.xyzj, rotMat)
+        self.ni = np.einsum('bj,aj->ba', self.ni, rotMat)
+
+    def translate(self, displVec: np.ndarray)-> None:
+        self.xyzi += displVec[None, :]
+        self.xyzj += displVec[None, None, :]
+
 
 class DualRotorExperiment:
-    def __init__(self, TSRs: tuple, Ns:tuple, dthetas:tuple, Qinf, R, aw = 0.2, geomfunc:callable=rw.rotor_blade, nblades=3, spacing='cosine', blade_bounds:tuple=(0.2, 1)):
-        self.spacing = 'cosine'
-        self.R = R
-        self.nblades = nblades
+    def __init__(self, ROTORS: tuple[Rotor, ...], Qinf, aw = 0.2, spacing='cosine'):
+        self.spacing = spacing
         self.Qinf = Qinf
-        self.bladefunc = geomfunc
-        self.blade_bounds = blade_bounds
         self.method_dict = {'cosine': self.cosine_spacing, 'linear': self.linear_spacing}
-        self.geomfunc = rw.rotor_wake
         self.aw=aw
-        self.TSRs = TSRs
-
-        self.rev1 = 5
-        self.rev2 = 5
-
-        ROTOR1 = self._assemble_rotor(TSR=TSRs[0], N=Ns[0], dtheta=dthetas[0], revolutions=self.rev1)
-        ROTOR2 = self._assemble_rotor(TSR=TSRs[1], N=Ns[1], dtheta=dthetas[1], revolutions=self.rev2)
+        wakerevs = [5, 5]
+        self.ROTORS = [self._init_Rotor(ROTORS[i], wakerevs[i]) for i in range(len(ROTORS))]
+        self.base_rotors = copy.deepcopy(self.ROTORS)
+        self.nrotors = len(self.base_rotors)
 
     @staticmethod
     def cosine_spacing(a, b, N):
@@ -187,37 +203,41 @@ class DualRotorExperiment:
     def linear_spacing(a, b, N):
         return np.linspace(a, b, N+1)
 
-    def _assemble_rotor(self, TSR, N, dtheta, revolutions):
-        theta_array = np.arange(0, revolutions * 2 * np.pi, dtheta)
-        ri_elem_boundaries = self.method_dict[self.spacing](0.2 * self.R, self.R, N)
-        xyzi, xyzj, ni, _ = rw.rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=N, geom_func=self.geomfunc, R=self.R, TSR=TSR / (1 - self.aw), nblades=self.nblades, plot=True, fbound=0., fcp=0., )
-        return Rotor(xyzi=xyzi, xyzj=xyzj, ni=ni, N=N, elem_boundaries=ri_elem_boundaries, R=self.R)
+    def _reset_rotors(self)->None:
+        self.ROTORS = self.base_rotors
 
-    def simulate(self):
+    def _init_Rotor(self, ROTOR: Rotor, revolutions)->Rotor:
+        theta_array = np.arange(0, revolutions * 2 * np.pi, ROTOR.dtheta)
+        ri_elem_boundaries = self.method_dict[self.spacing](0.2 * ROTOR.R, ROTOR.R, ROTOR.N)
+        xyzi, xyzj, ni, _ = rw.rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, N=ROTOR.N, geom_func=ROTOR.geomfunc, R=ROTOR.R, TSR=ROTOR.TSR / (1 - self.aw), nblades=ROTOR.nblades, plot=True, fbound=0., fcp=0., )
+        return ROTOR
+
+    def simulate(self, delta_phi_0s: tuple[float, ...], delta_Ls: tuple[float, ...], ):
+        self._reset_rotors()
+        for i in rangeself.ROTORS:
+
         return
 
-    def rotate_x_axis(self, ROTOR: Rotor, angle):
+    def x_rotstion_matrix(self, angle):
         c = np.cos(angle)
         s = np.sin(angle)
-        rot = np.array([[1, c, 0],
-                        [0, c, -s],
-                        [0, s, c]])
-        ROTOR.xyzi = np.einsum('bj,aj->ba', ROTOR.xyzi, rot)
-        ROTOR.xyzj = np.einsum('bcj,aj->bca', ROTOR.xyzj, rot)
-        ROTOR.ni = np.einsum('bj,aj->ba', ROTOR.ni, rot)
-        return ROTOR
+        rot = np.array([[1, c, 0], [0, c, -s], [0, s, c]])
+        return rot
 
-    def translate(self, ROTOR: Rotor, t_vec):
-        ROTOR.xyzi += t_vec[None, :]
-        ROTOR.xyzj += t_vec[None, None, :]
-        return ROTOR
+
+
 
 
 if __name__ == '__main__':
     Qinf = np.array([1,0,0])
-    E = SingleRotorExperiment(R=50, nblades=3, Qinf=Qinf)
+    ROTOR1 = Rotor(R=50,dtheta=np.pi/10, N=11,TSR=8,geomfunc=rw.rotor_blade,nblades=3,blade_bounds=(0.2,1),)
+    ROTOR2 = Rotor(R=50,dtheta=np.pi/10, N=11, TSR=8, geomfunc=rw.rotor_blade, nblades=3, blade_bounds=(0.2, 1))
+    DR = DualRotorExperiment(ROTORS=(ROTOR1, ROTOR2), Qinf=Qinf, )
+
+
+    #E = SingleRotorExperiment(R=50, nblades=3, Qinf=Qinf)
     #E.collect_variable(TSR=6, aw=0.2, N=11, revolutions=50, dtheta=np.linspace(np.pi/50,np.pi/2, 3), spacing='cosine')
-    E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=25, revolutions=50, dtheta=np.pi/10, spacing='cosine', monitor=False)
+    #E.collect_variable(TSR = np.array([4, 6, 8]), aw=0.2, N=25, revolutions=50, dtheta=np.pi/10, spacing='cosine', monitor=False)
     #E.collect_variable(TSR=6, aw=np.array([.05, .35, .65]), N=11, revolutions=50, dtheta=np.pi / 10, spacing='cosine')
     #E.collect_variable(TSR=6, aw=0.2, N=25, revolutions=np.array([.5, 5, 50]), dtheta=np.pi/10, spacing='cosine')
     #E.collect_convergence(TSR=6, aw=0.2, N=np.linspace(1, 40, 7, dtype=int), revolutions=50, dtheta=np.pi/10, spacing=np.array(['linear', 'cosine']))
