@@ -382,6 +382,9 @@ class DualRotorExperiment:
         rot = np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
         return rot
 
+    def plot_instantaneous(self):
+        pass
+
 
 
 
