@@ -32,12 +32,12 @@ class Rotor:
     def copy(self) -> 'Rotor':
         return Rotor(**asdict(self))
 
-    def rotate(self, rotMat: np.ndarray) ->None:
+    def rotate(self, rotMat: np.ndarray) -> None:
         self.xyzi = np.einsum('bj,aj->ba', self.xyzi, rotMat)
         self.xyzj = np.einsum('bcj,aj->bca', self.xyzj, rotMat)
         self.ni = np.einsum('bj,aj->ba', self.ni, rotMat)
 
-    def translate(self, displVec: np.ndarray)-> None:
+    def translate(self, displVec: np.ndarray) -> None:
         self.xyzi += displVec[None, :]
         self.xyzj += displVec[None, None, :]
         self.center = self.center + displVec
@@ -154,13 +154,14 @@ class MultiWakeSim(VortexSim):
     def direct_solve(self):
         pass
 
-    def plot_instantaneous(self, lw = 0.75, fs=4)->None:
+    def plot_instantaneous(self, lw = 0.75, fs=5)->None:
         colors = ['k',  'b', 'g']
         fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(14, 7))
         for r, rotor in enumerate(self.ROTORs):
             c = colors[r]
-            for i in range(rotor.nblades):
-                leg_str = f'blade_idx={i+1}, '+f'rotor_idx={r+1}'
+            blade_range = [0] if len(self.ROTORs) == 1 else range(rotor.nblades)
+            for i in blade_range:
+                leg_str = f'blade={i+1}, '+f'rotor={r+1}'
                 axes[0,0].plot(rotor.results['r_R'][i], rotor.results['Gamma'][i], marker='o', color=c,label='$\\tilde{\Gamma}$: '+leg_str, linewidth=lw)
                 axes[0,1].plot(rotor.results['r_R'][i], rotor.results['Faxial'][i], marker='o', color=c, label='$\\tilde{F}_{axial}$: '+leg_str, linewidth=lw)
                 axes[0,1].plot(rotor.results['r_R'][i], rotor.results['Fazim'][i], linestyle='--', marker='s',color=c, label='$\\tilde{F}_{azim}$: '+leg_str, linewidth=lw)
@@ -197,9 +198,7 @@ class MultiWakeSim(VortexSim):
         Omega_vecs = [np.array([-ROTORs[i].direction*Omegai, 0, 0]) for i, Omegai in enumerate(Omegas)]
         radial_positions = [np.sqrt(np.einsum('ij, ij->i', ROTOR.xyzi - ROTOR.center[None, :], ROTOR.xyzi - ROTOR.center[None, :])) for ROTOR in ROTORs]
         orthogonals = np.concatenate([np.array([-1 / radial_positions[i], np.zeros_like(radial_positions[i]), np.zeros_like(radial_positions[i])]).T for i in range(len(ROTORs))])
-        self.chords, self.twists = map(lambda arrs: np.concatenate(arrs),zip(*[
-                rot.geomfunc(radial_positions[i] / rot.R)
-                for i, rot in enumerate(ROTORs)]))
+        self.chords, self.twists = map(lambda arrs: np.concatenate(arrs),zip(*[rot.geomfunc(radial_positions[i] / rot.R) for i, rot in enumerate(ROTORs)]))
         gammas0 = np.zeros(self.xyzi.shape[0])
         eijk = np.zeros((3, 3, 3), dtype=int)
         eijk[0, 1, 2] = eijk[1, 2, 0] = eijk[2, 0, 1] = 1
@@ -224,7 +223,6 @@ class MultiWakeSim(VortexSim):
         vaxial = vel1s[:, 0]
         temploads =  self._loadBladeElement(vaxial, vazim,)
         for i, ROTOR in enumerate(ROTORs):
-            #print(i)
             r_R = np.array(radial_positions[i] / ROTOR.R)
             r_R = r_R.reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
             alines = (vazim[rotor_ids == i] / (radial_positions[i] * Omegas[i]) - 1).reshape(ROTOR.nblades, int(r_R.size / ROTOR.nblades))
@@ -365,9 +363,10 @@ def rotor_wake(theta_array, ri_elem_boundaries, ROTOR: Rotor, aw=0.2, fcp=0.75, 
         ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
         ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
         blade_plot = xyzi.reshape(ROTOR.nblades, ROTOR.N, 3)
-        for bi in range(nblades):
+
+        for bi in range(ROTOR.nblades):
             ax.plot(blade_plot[bi, :,0],blade_plot[bi, :,1],blade_plot[bi, :,2], color='r',marker='none', zorder=10)
-            for i in range(N):
+            for i in range(ROTOR.N):
                 ax.plot(xyzj[ bi, i,:, 0], xyzj[bi,i,  :, 1], xyzj[ bi,i, :, 2], color='b', linewidth=.2, )#alpha=.6)
         plt.xlim([0, 4*ROTOR.R])
         plt.gca().set_aspect('equal')
@@ -447,7 +446,7 @@ class SingleRotorExperiment:
         key = self.ROTOR.results['key']
         keyvals = self.ROTOR.results['key_vals']
         for i, keyval in enumerate(keyvals):
-            kv = (f'={keyvals[i]:.2f}' if isinstance(keyvals[i], float) else f'={keyvals[i]}')
+            kv = (f'{keyvals[i]:.2f}' if isinstance(keyvals[i], float) else f'{keyvals[i]}')
             results = self.ROTOR.results['results'][keyval]
             r_R = np.average(results['r_R'], axis=0)
             axes[0,0].plot(r_R, np.average(results['Gamma'], axis=0), marker='o', color=colors[i],label='$\\tilde{\Gamma}$: '+key+f'={kv}', linewidth=lw)
@@ -456,7 +455,7 @@ class SingleRotorExperiment:
             axes[1,0].plot(r_R, np.average(results['a'], axis=0), marker='o', color=colors[i],label='$a$: '+key+f'={kv}', linewidth=lw)
             axes[1,0].plot(r_R, np.average(results['aline'], axis=0), marker='s', linestyle='--', color=colors[i],label='$a^{,}$: '+key+f'={kv}', linewidth=lw)
             axes[1,1].plot(r_R, np.average(results['alpha'], axis=0), marker='o', color=colors[i],label='$\\alpha$: '+key+f'={kv}', linewidth=lw)
-            axes[1,1].plot(r_R, np.average(results['inflow'], axis=0), marker='o',linestyle='--', color=colors[i], label='$\phi$: ' +key+ f'={kv}', linewidth=lw)
+            axes[1,1].plot(r_R, np.average(results['inflow'], axis=0), marker='s',linestyle='--', color=colors[i], label='$\phi$: ' +key+ f'={kv}', linewidth=lw)
         axes[0, 0].grid()
         axes[0, 0].set_ylim(bottom=0)
         axes[0, 0].set_ylabel('$\\tilde{\Gamma}$')
@@ -503,7 +502,7 @@ class SingleRotorExperiment:
                 theta_array = np.arange(0, loop_args['revolutions'] * 2 * np.pi, loop_args['dtheta'])
                 self.ROTOR.TSR = loop_args['TSR']
                 self.ROTOR.N = loop_args['N']
-                self.ROTOR = self.geomfunc(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, ROTOR=self.ROTOR, plot=monitor, fbound=0., fcp=0., aw=loop_args['aw'])
+                self.geomfunc(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, ROTOR=self.ROTOR, plot=monitor, fbound=0., fcp=0., aw=loop_args['aw'])
                 self.ROTORSIM.update(xyzi_new=self.ROTOR.xyzi, xyzj_new=self.ROTOR.xyzj, ni_new=self.ROTOR.ni, Qinf_new=self.Qinf,)
                 self.ROTORSIM.iter_solve(niter=1200, tol=1e-8, plot=monitor, verbose=False)
                 self.ROTOR.results['results'][(sweep_val_1, sweep_val_2)] = self.ROTORSIM.ROTORs[0].results.copy()
@@ -529,7 +528,7 @@ class SingleRotorExperiment:
             theta_array = np.arange(0, loop_args['revolutions'] * 2 * np.pi, loop_args['dtheta'])
             self.ROTOR.TSR = loop_args['TSR']
             self.ROTOR.N = loop_args['N']
-            self.ROTOR = self.geomfunc(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, ROTOR=self.ROTOR, plot=monitor, fbound=0., fcp=0., aw=loop_args['aw'])
+            self.geomfunc(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, ROTOR=self.ROTOR, plot=monitor, fbound=0., fcp=0., aw=loop_args['aw'])
             self.ROTORSIM.update(xyzi_new=self.ROTOR.xyzi, xyzj_new=self.ROTOR.xyzj, ni_new=self.ROTOR.ni, Qinf_new=self.Qinf,)
             self.ROTORSIM.iter_solve(niter=1200, tol=1e-8, plot=monitor, verbose=False)
             self.ROTOR.results['results'][sweep_val] = self.ROTORSIM.ROTORs[0].results.copy()
@@ -542,9 +541,9 @@ class DualRotorExperiment:
         self.Qinf = Qinf
         self.method_dict = {'cosine': cosine_spacing, 'linear': self.linear_spacing}
         self.aw=aw
-        wakerevs = [5, 5]
+        wakerevs = [50, 50]
         self.ROTORS = [self._init_Rotor(ROTORS[i], wakerevs[i]) for i in range(len(ROTORS))]
-        self.base_rotors = [ROT.copy() for ROT in self.ROTORS]#copy.deepcopy(self.ROTORS)
+        self.base_rotors = [ROT.copy() for ROT in self.ROTORS]
         self.nrotors = len(self.base_rotors)
 
     @staticmethod
@@ -557,10 +556,10 @@ class DualRotorExperiment:
     def _init_Rotor(self, ROTOR: Rotor, revolutions)->Rotor:
         theta_array = np.arange(0, revolutions * 2 * np.pi, ROTOR.dtheta)
         ri_elem_boundaries = self.method_dict[self.spacing](0.2 * ROTOR.R, ROTOR.R, ROTOR.N)
-        ROTOR = rotor_wake(aw=self.aw, theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, ROTOR=ROTOR, plot=False, fbound=0., fcp=0., )
+        rotor_wake(aw=self.aw, theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, ROTOR=ROTOR, plot=False, fbound=0., fcp=0., )
         return ROTOR
 
-    def simulate(self, delta_phi_0s: tuple[float, ...], delta_Ls: tuple[float, ...], plot: bool = True):
+    def simulate(self, delta_phi_0s: tuple[float, ...], delta_Ls: tuple[float, ...], plot: bool = True)->None:
         self._reset_rotors()
         for i in range(self.nrotors):
             rotMat = self.x_rotation_matrix(angle=delta_phi_0s[i])
@@ -595,7 +594,6 @@ class DualRotorExperiment:
             plt.tight_layout()
             plt.show()
         rotorsim.iter_solve(plot=plot)
-        return
 
     def x_rotation_matrix(self, angle):
         c = np.cos(angle)
@@ -614,24 +612,32 @@ if __name__ == "__main__":
     aw          = 0.2
     Qinf        = np.array([1, 0, 0])
 
+    'double rotor experiment'
     ROTOR1 = Rotor(R=50, dtheta=np.pi / 10, N=11, TSR=6, geomfunc=rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=1)
     ROTOR2 = Rotor(R=50, dtheta=np.pi / 10, N=8, TSR=8, geomfunc=rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=1)
-    DR = DualRotorExperiment(ROTORS=(ROTOR1, ROTOR2), Qinf=Qinf, )
-    DR.simulate(delta_phi_0s=(0, np.radians(30)), delta_Ls=(0, 200), plot=True)
+    #DR = DualRotorExperiment(ROTORS=(ROTOR1, ROTOR2), Qinf=Qinf,)
+    #DR.simulate(delta_phi_0s=(0, np.radians(30)), delta_Ls=(0, 200), plot=True)
 
-    ROTOR = Rotor(R=50, geomfunc=rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=+1)
-    E = SingleRotorExperiment(ROTOR=ROTOR, Qinf=Qinf)
-    E.collect_variable(TSR=np.array([4, 6, 8]), aw=0.2, N=25, revolutions=50, dtheta=np.pi / 10, spacing='cosine', monitor=False)
-    #E.collect_convergence(TSR=6, aw=0.2, N=np.array([2 ** k for k in range(1, 4)]), revolutions=50, dtheta=np.linspace(np.pi / 2, np.pi / 4, 2), spacing='cosine')
+    'single rotor experiment'
+    ROTOR3 = Rotor(R=50, geomfunc=rotor_blade, nblades=3, blade_bounds=(0.2, 1), direction=+1)
+    E = SingleRotorExperiment(ROTOR=ROTOR3, Qinf=Qinf)
+    #E.collect_variable(TSR=6, aw=np.array([.05, .35, .65]), N=25, revolutions=50, dtheta=np.pi / 10, spacing='cosine')
+    #E.collect_variable(TSR=np.array([4, 6, 8]), aw=0.2, N=25, revolutions=50, dtheta=np.pi / 10, spacing='cosine', monitor=False)
+    #E.collect_variable(TSR=6, aw=0.2, N=25, revolutions=50, dtheta=np.linspace(np.pi/50,np.pi/2, 3), spacing='cosine')
+    #E.collect_variable(TSR=6, aw=0.2, N=25, revolutions=np.array([.5, 5, 50]), dtheta=np.pi/10, spacing='cosine')
+    #E.collect_variable(TSR=6, aw=0.2, N=40, revolutions=50, dtheta=np.pi / 10, spacing=np.array(['cosine', 'linear']))
+    #E.collect_convergence(TSR=6, N=np.array([2**k for k in range(0, 7)]), aw=0.2, revolutions=50, dtheta=np.pi/10, spacing=np.array(['cosine', 'linear']), monitor=False)
+    #E.collect_variable(TSR=6, aw=0.2, N=25, revolutions=np.array([.5, 5, 50]), dtheta=np.pi / 10, spacing='cosine')
+    #E.collect_convergence(TSR=6, aw=0.2, N=11, revolutions=np.array([2**k for k in range(0, 10)]), dtheta=np.pi/10, spacing=np.array(['cosine', 'linear']))
 
-    'generate geometry'
-    ROTOR = Rotor(N=N, TSR=TSR, R=R, nblades=nblades, geomfunc=rotor_blade, blade_bounds=(0.2, 1.0),)
+    'generate and associate geometry'
+    ROTOR4 = Rotor(N=N, TSR=TSR, R=R, nblades=nblades, geomfunc=rotor_blade, blade_bounds=(0.2, 1.0),)
     theta_array        = np.arange(0, revolutions * 2 * np.pi, np.pi / 10)
     ri_elem_boundaries = cosine_spacing(0.2 * R, R, N) #r_array * R #
-    ROTOR = rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, aw=aw, ROTOR=ROTOR, plot=True, fbound=0., fcp=0., )
+    ROTOR4 = rotor_wake(theta_array=theta_array, ri_elem_boundaries=ri_elem_boundaries, aw=aw, ROTOR=ROTOR4, plot=True, fbound=0., fcp=0., )
 
     'simulation'
-    ROTORSIM = MultiWakeSim(ROTORs=[ROTOR], Qinf=Qinf,)
+    ROTORSIM = MultiWakeSim(ROTORs=[ROTOR4], Qinf=Qinf,)
     ROTORSIM.iter_solve(niter=1200, tol=1e-8, plot=True, )
     resLL = ROTORSIM.ROTORs[0].results
     print(f'(CT, CP) = ({resLL["CT"]:.2f},{resLL["CP"]:.2f})')
